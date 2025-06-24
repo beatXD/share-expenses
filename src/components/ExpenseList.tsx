@@ -22,8 +22,16 @@ import {
   DateRangePicker,
   type DateRange,
 } from '@/components/ui/date-range-picker';
+import {
+  format,
+  parseISO,
+  isWithinInterval,
+  startOfDay,
+  endOfDay,
+} from 'date-fns';
+
 import { formatCurrency, calculateUserBalances } from '@/lib/calculations';
-import type { User, Expense, ExpenseCategory, ExpenseStatus } from '@/types';
+import type { User, Expense, ExpenseStatus } from '@/types';
 
 interface ExpenseListProps {
   expenses: Expense[];
@@ -57,18 +65,6 @@ export function ExpenseList({
     return user?.color || '#6b7280';
   };
 
-  const getCategoryLabel = (category: ExpenseCategory) => {
-    const categoryMap = {
-      food: '🍽️ อาหาร',
-      transport: '🚗 ขนส่ง',
-      shopping: '🛒 ช็อปปิ้ง',
-      entertainment: '🎬 บันเทิง',
-      utilities: '💡 สาธารณูปโภค',
-      other: '📂 อื่นๆ',
-    };
-    return categoryMap[category];
-  };
-
   const getStatusLabel = (status: ExpenseStatus) => {
     return status === 'settled' ? '✅ เคลียแล้ว' : '⏳ รอเคลีย';
   };
@@ -79,28 +75,50 @@ export function ExpenseList({
       : 'bg-yellow-100 text-yellow-800';
   };
 
+  // Calculate split amounts for an expense
+  const calculateExpenseSplit = (expense: Expense) => {
+    const splits: Record<string, number> = {};
+
+    // Ensure we have participants, fallback to all users if not available
+    const participants =
+      expense.participants && expense.participants.length > 0
+        ? expense.participants
+        : users.map(user => user.id);
+
+    if (expense.splitType === 'equal') {
+      // Equal split among all participants
+      const splitAmount = expense.amount / participants.length;
+      participants.forEach(userId => {
+        splits[userId] = splitAmount;
+      });
+    } else if (expense.splitType === 'custom' && expense.customSplits) {
+      // Use custom splits
+      participants.forEach(userId => {
+        splits[userId] = expense.customSplits?.[userId] || 0;
+      });
+    } else {
+      // Fallback to equal split if custom splits are missing
+      const splitAmount = expense.amount / participants.length;
+      participants.forEach(userId => {
+        splits[userId] = splitAmount;
+      });
+    }
+
+    return splits;
+  };
+
   const toggleStatus = (expense: Expense) => {
     const newStatus = expense.status === 'settled' ? 'pending' : 'settled';
     onUpdateStatus?.(expense.id, newStatus);
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('th-TH', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-    });
-  };
-
   const filterExpensesByDateRange = (expenses: Expense[], range: DateRange) => {
-    const startDate = new Date(range.startDate);
-    const endDate = new Date(range.endDate);
-    endDate.setHours(23, 59, 59, 999); // Include the entire end date
+    const startDate = startOfDay(parseISO(range.startDate));
+    const endDate = endOfDay(parseISO(range.endDate));
 
     return expenses.filter(expense => {
-      const expenseDate = new Date(expense.date);
-      return expenseDate >= startDate && expenseDate <= endDate;
+      const expenseDate = parseISO(expense.date);
+      return isWithinInterval(expenseDate, { start: startDate, end: endDate });
     });
   };
 
@@ -110,26 +128,9 @@ export function ExpenseList({
     onDateRangeChange?.(updatedRange);
   };
 
-  const setQuickDateRange = (days: number) => {
-    const end = new Date();
-    const start = new Date(end.getTime() - days * 24 * 60 * 60 * 1000);
-
-    const newRange = {
-      startDate: start.toISOString().split('T')[0],
-      endDate: end.toISOString().split('T')[0],
-    };
-
-    setLocalDateRange(newRange);
-    onDateRangeChange?.(newRange);
-  };
-
   const filteredExpenses = filterExpensesByDateRange(expenses, localDateRange);
   const pendingExpenses = filteredExpenses.filter(
     expense => expense.status === 'pending'
-  );
-  const totalAmount = filteredExpenses.reduce(
-    (sum, expense) => sum + expense.amount,
-    0
   );
   const pendingAmount = pendingExpenses.reduce(
     (sum, expense) => sum + expense.amount,
@@ -193,14 +194,14 @@ export function ExpenseList({
 
   if (expenses.length === 0) {
     return (
-      <Card className="shadow-xl border border-gray-200 bg-white rounded-2xl">
-        <CardContent className="p-12 text-center">
-          <div className="text-gray-300 text-8xl mb-6">📝</div>
-          <CardTitle className="text-2xl font-semibold text-gray-900 mb-3 thai-text">
+      <Card className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg">
+        <CardContent className="p-8 text-center">
+          <div className="text-4xl mb-4">📊</div>
+          <CardTitle className="text-lg font-semibold text-gray-900 dark:text-white mb-2 thai-text">
             ยังไม่มีรายจ่าย
           </CardTitle>
-          <CardDescription className="text-gray-600 text-lg thai-text">
-            เริ่มต้นโดยการเพิ่มรายจ่ายแรกของคุณ
+          <CardDescription className="text-sm text-gray-600 dark:text-gray-400 thai-text">
+            เริ่มต้นโดยการเพิ่มรายจ่ายแรก
           </CardDescription>
         </CardContent>
       </Card>
@@ -210,173 +211,152 @@ export function ExpenseList({
   return (
     <div className="space-y-6">
       {/* Filter and Summary Section */}
-      <Card className="shadow-xl border border-gray-200 bg-white rounded-2xl overflow-hidden">
-        <CardHeader className="py-4 bg-gradient-to-r from-green-50 to-emerald-50 border-b border-gray-100">
-          <CardTitle className="text-xl font-semibold text-gray-900 thai-text">
-            📋 รายการค่าใช้จ่าย
+      <Card className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg">
+        <CardHeader className="">
+          <CardTitle className="text-lg font-semibold text-gray-900 dark:text-white thai-text">
+            รายการค่าใช้จ่าย
           </CardTitle>
         </CardHeader>
-        <CardContent className="p-6">
-          <div className="space-y-6">
+        <CardContent className="">
+          <div className="space-y-4">
             {/* Date Range Picker */}
             <DateRangePicker
               dateRange={localDateRange}
               onDateRangeChange={handleDateRangeChange}
-              onQuickSelect={setQuickDateRange}
             />
 
             {/* Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="p-4 bg-gradient-to-r from-blue-50 to-blue-100 rounded-xl border border-blue-200">
-                <div className="text-sm text-blue-700 font-medium thai-text mb-1">
-                  📊 ทั้งหมด
-                </div>
-                <div className="text-2xl font-bold text-blue-900">
-                  {formatCurrency(totalAmount)}
-                </div>
-                <div className="text-xs text-blue-600 thai-text">
-                  {filteredExpenses.length} รายการ
-                </div>
-              </div>
+              {/* Each person's total payments */}
+              {users.map(user => {
+                const userExpenses = filteredExpenses.filter(
+                  expense => expense.paidBy === user.id
+                );
+                const totalPaid = userExpenses.reduce(
+                  (sum, expense) => sum + expense.amount,
+                  0
+                );
+                const expenseCount = userExpenses.length;
 
-              <div className="p-4 bg-gradient-to-r from-yellow-50 to-orange-100 rounded-xl border border-orange-200">
-                <div className="text-sm text-orange-700 font-medium thai-text mb-1">
-                  ⏳ รอเคลีย
-                </div>
-                <div className="text-2xl font-bold text-orange-900">
-                  {formatCurrency(pendingAmount)}
-                </div>
-                <div className="text-xs text-orange-600 thai-text">
-                  {pendingExpenses.length} รายการ
-                </div>
-              </div>
+                return (
+                  <div
+                    key={user.id}
+                    className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600"
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <div
+                        className="w-4 h-4 rounded-full"
+                        style={{ backgroundColor: user.color }}
+                      />
+                      <div className="text-sm text-gray-700 dark:text-gray-300 font-medium thai-text">
+                        {user.name} จ่ายไป
+                      </div>
+                    </div>
+                    <div className="text-xl font-bold text-gray-900 dark:text-white mb-1">
+                      {formatCurrency(totalPaid)}
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 thai-text">
+                      {expenseCount} รายการ
+                    </div>
+                  </div>
+                );
+              })}
 
+              {/* Settlement status and button */}
               <div className="flex items-center justify-center">
                 {pendingExpenses.length > 0 ? (
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button className="w-full h-12 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 shadow-lg hover:shadow-xl transition-all duration-200 thai-text">
-                        💸 เคลียยอดทั้งหมด
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent className="rounded-2xl shadow-2xl border border-gray-200">
-                      <AlertDialogHeader>
-                        <AlertDialogTitle className="text-xl font-bold thai-text">
-                          💸 ยืนยันเคลียยอด
-                        </AlertDialogTitle>
-                        <AlertDialogDescription className="text-base thai-text">
-                          จะทำการเคลียยอดรายการทั้งหมด {pendingExpenses.length}{' '}
-                          รายการ
-                          <br />
-                          ยอดรวม:{' '}
-                          <span className="font-semibold text-green-600">
-                            {formatCurrency(pendingAmount)}
-                          </span>
-                          <br />
-                          <br />
-                          <span className="text-orange-600 font-medium">
-                            รายการที่เคลียแล้วจะไม่ถูกนำมาคำนวณใหม่
-                          </span>
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel className="shadow-sm hover:shadow-md thai-text">
-                          ❌ ยกเลิก
-                        </AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={handleClearSettlements}
-                          className="bg-green-600 hover:bg-green-700 shadow-sm hover:shadow-md thai-text"
+                  <div className="w-full">
+                    {/* Show who owes whom */}
+                    <div className="mb-2 space-y-1">
+                      {settlementSuggestions.map((settlement, index) => (
+                        <div
+                          key={index}
+                          className="text-xs text-emerald-600 dark:text-emerald-400 thai-text"
                         >
-                          💸 เคลียยอด
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
+                          {getUserName(settlement.from)} เป็นหนี้{' '}
+                          {getUserName(settlement.to)}
+                          <span className="font-semibold">
+                            {' '}
+                            {formatCurrency(settlement.amount)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button className="w-full h-9 bg-emerald-500 hover:bg-emerald-600 text-white text-sm thai-text">
+                          เคลียยอดทั้งหมด
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                        <AlertDialogHeader>
+                          <AlertDialogTitle className="text-lg font-semibold thai-text text-gray-900 dark:text-white">
+                            ยืนยันเคลียยอด
+                          </AlertDialogTitle>
+                          <AlertDialogDescription className="text-sm thai-text text-gray-600 dark:text-gray-400">
+                            จะทำการเคลียยอดรายการทั้งหมด{' '}
+                            <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                              {pendingExpenses.length}
+                            </span>{' '}
+                            รายการ ยอดรวม{' '}
+                            <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                              {formatCurrency(pendingAmount)}
+                            </span>
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter className="gap-2">
+                          <AlertDialogCancel className="h-9 px-4 text-sm thai-text">
+                            ยกเลิก
+                          </AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={handleClearSettlements}
+                            className="h-9 px-4 bg-emerald-500 hover:bg-emerald-600 text-sm thai-text"
+                          >
+                            เคลียยอด
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
                 ) : (
-                  <div className="text-center">
-                    <div className="text-green-400 text-4xl mb-2">🎉</div>
-                    <div className="text-sm font-medium text-green-600 thai-text">
+                  <div className="text-center p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                    <div className="text-2xl mb-2">✅</div>
+                    <div className="text-sm font-semibold text-emerald-700 dark:text-emerald-400 thai-text">
                       ไม่มีหนี้ค้างจ่าย
                     </div>
                   </div>
                 )}
               </div>
             </div>
-
-            {/* Settlement Suggestions */}
-            {settlementSuggestions.length > 0 && (
-              <div className="p-4 bg-gradient-to-r from-amber-50 to-yellow-50 rounded-xl border border-amber-200">
-                <h4 className="text-sm font-semibold text-amber-800 mb-3 thai-text">
-                  💡 คำแนะนำการชำระ
-                </h4>
-                <div className="space-y-2">
-                  {settlementSuggestions.map((settlement, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center justify-between bg-white px-3 py-2 rounded-lg shadow-sm"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="flex items-center gap-2">
-                          <div
-                            className="w-3 h-3 rounded-full"
-                            style={{
-                              backgroundColor: getUserColor(settlement.from),
-                            }}
-                          />
-                          <span className="text-sm text-gray-700 thai-text">
-                            {getUserName(settlement.from)}
-                          </span>
-                        </div>
-                        <div className="text-amber-500 text-sm">→</div>
-                        <div className="flex items-center gap-2">
-                          <div
-                            className="w-3 h-3 rounded-full"
-                            style={{
-                              backgroundColor: getUserColor(settlement.to),
-                            }}
-                          />
-                          <span className="text-sm text-gray-700 thai-text">
-                            {getUserName(settlement.to)}
-                          </span>
-                        </div>
-                      </div>
-                      <span className="text-sm font-semibold text-amber-700">
-                        {formatCurrency(settlement.amount)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         </CardContent>
       </Card>
 
       {/* Expense List - Table-like Display */}
       {filteredExpenses.length === 0 ? (
-        <Card className="shadow-lg border border-gray-200 bg-white rounded-2xl">
+        <Card className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg">
           <CardContent className="p-8 text-center">
-            <div className="text-gray-300 text-6xl mb-4">🔍</div>
-            <CardTitle className="text-lg font-medium text-gray-900 mb-2 thai-text">
+            <div className="text-4xl mb-4">🔍</div>
+            <CardTitle className="text-lg font-semibold text-gray-900 dark:text-white mb-2 thai-text">
               ไม่มีรายจ่ายในช่วงเวลานี้
             </CardTitle>
-            <CardDescription className="text-gray-600 thai-text">
+            <CardDescription className="text-sm text-gray-600 dark:text-gray-400 thai-text">
               ลองเลือกช่วงเวลาอื่น หรือเพิ่มรายจ่ายใหม่
             </CardDescription>
           </CardContent>
         </Card>
       ) : (
-        <Card className="shadow-lg border border-gray-200 bg-white rounded-2xl overflow-hidden">
+        <Card className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg overflow-hidden">
           <div className="overflow-x-auto">
             {/* Table Header */}
-            <div className="grid grid-cols-7 gap-4 p-4 bg-gray-50 border-b border-gray-200 font-semibold text-sm text-gray-700">
-              <div className="thai-text">📝 รายการ</div>
-              <div className="thai-text">💰 จำนวน</div>
-              <div className="thai-text">👤 ผู้จ่าย</div>
-              <div className="thai-text">📂 หมวดหมู่</div>
-              <div className="thai-text">🕒 วันที่</div>
-              <div className="thai-text">📊 สถานะ</div>
-              <div className="thai-text text-center">⚙️ จัดการ</div>
+            <div className="grid grid-cols-7 gap-3 p-3 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 font-medium text-sm text-gray-700 dark:text-gray-300">
+              <div className="thai-text">วันที่/เวลา</div>
+              <div className="thai-text">รายการ</div>
+              <div className="thai-text">จำนวน</div>
+              <div className="thai-text">ผู้จ่าย</div>
+              <div className="thai-text">การแบ่ง</div>
+              <div className="thai-text">สถานะ</div>
+              <div className="thai-text text-center">จัดการ</div>
             </div>
 
             {/* Table Rows */}
@@ -384,46 +364,57 @@ export function ExpenseList({
               {filteredExpenses
                 .sort(
                   (a, b) =>
-                    new Date(b.date).getTime() - new Date(a.date).getTime()
+                    parseISO(b.date).getTime() - parseISO(a.date).getTime()
                 )
                 .map(expense => (
                   <div
                     key={expense.id}
-                    className={`grid grid-cols-7 gap-4 p-4 border-b border-gray-100 hover:bg-gray-50 transition-colors ${
+                    className={`grid grid-cols-7 gap-3 p-3 border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
                       expense.status === 'settled' ? 'opacity-60' : ''
                     }`}
                   >
+                    {/* Date */}
+                    <div className="text-xs text-gray-600 dark:text-gray-400 thai-text">
+                      <div className="font-medium">
+                        {format(parseISO(expense.date), 'dd/MM/yyyy')}
+                      </div>
+                      <div className="text-gray-500 dark:text-gray-500">
+                        {format(parseISO(expense.date), 'HH:mm')}
+                      </div>
+                    </div>
+
                     {/* Description */}
-                    <div className="font-medium text-gray-900 thai-text">
+                    <div className="text-sm font-medium text-gray-900 dark:text-white thai-text">
                       {expense.description}
                     </div>
 
                     {/* Amount */}
-                    <div className="font-bold text-green-600">
+                    <div className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
                       {formatCurrency(expense.amount)}
                     </div>
 
                     {/* Paid By */}
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1">
                       <div
-                        className="w-3 h-3 rounded-full"
+                        className="w-2 h-2 rounded-full"
                         style={{
                           backgroundColor: getUserColor(expense.paidBy),
                         }}
                       />
-                      <span className="text-sm text-gray-700 thai-text">
+                      <span className="text-xs text-gray-700 dark:text-gray-300 thai-text">
                         {getUserName(expense.paidBy)}
                       </span>
                     </div>
 
-                    {/* Category */}
-                    <div className="text-sm text-gray-600 thai-text">
-                      {getCategoryLabel(expense.category)}
-                    </div>
-
-                    {/* Date */}
-                    <div className="text-sm text-gray-600 thai-text">
-                      {formatDate(expense.date)}
+                    {/* Split */}
+                    <div className="text-xs text-gray-600 dark:text-gray-400 thai-text">
+                      {Object.entries(calculateExpenseSplit(expense)).map(
+                        ([userId, amount], index) => (
+                          <div key={userId} className="truncate">
+                            {getUserName(userId)}: {formatCurrency(amount)}
+                          </div>
+                        )
+                      )}
                     </div>
 
                     {/* Status */}
@@ -432,21 +423,25 @@ export function ExpenseList({
                         variant="outline"
                         size="sm"
                         onClick={() => toggleStatus(expense)}
-                        className={`h-8 px-3 text-xs border-0 ${getStatusColor(expense.status)} hover:shadow-sm thai-text`}
+                        className={`h-7 px-2 text-xs border rounded-md font-medium thai-text ${
+                          expense.status === 'settled'
+                            ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
+                            : 'bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800'
+                        }`}
                       >
-                        {getStatusLabel(expense.status)}
+                        {expense.status === 'settled' ? 'เคลีย' : 'รอ'}
                       </Button>
                     </div>
 
                     {/* Actions */}
-                    <div className="flex gap-2 justify-center">
+                    <div className="flex gap-1 justify-center">
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => onEdit(expense)}
-                        className="h-8 px-3 text-xs hover:shadow-sm thai-text"
+                        className="h-7 px-2 text-xs border-gray-300 dark:border-gray-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 thai-text"
                       >
-                        ✏️
+                        แก้ไข
                       </Button>
 
                       <AlertDialog>
@@ -454,38 +449,33 @@ export function ExpenseList({
                           <Button
                             variant="outline"
                             size="sm"
-                            className="h-8 px-3 text-xs text-red-600 border-red-200 hover:bg-red-50 thai-text"
+                            className="h-7 px-2 text-xs text-red-600 dark:text-red-400 border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/20 thai-text"
                           >
-                            🗑️
+                            ลบ
                           </Button>
                         </AlertDialogTrigger>
-                        <AlertDialogContent className="rounded-2xl shadow-2xl border border-gray-200">
+                        <AlertDialogContent className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
                           <AlertDialogHeader>
-                            <AlertDialogTitle className="text-xl font-bold thai-text">
-                              ⚠️ ยืนยันการลบ
+                            <AlertDialogTitle className="text-lg font-semibold thai-text text-gray-900 dark:text-white">
+                              ยืนยันการลบ
                             </AlertDialogTitle>
-                            <AlertDialogDescription className="text-base thai-text">
-                              คุณต้องการลบรายจ่าย "{expense.description}" จำนวน{' '}
-                              <span className="font-semibold text-red-600">
+                            <AlertDialogDescription className="text-sm thai-text text-gray-600 dark:text-gray-400">
+                              ลบรายจ่าย "{expense.description}" จำนวน{' '}
+                              <span className="font-semibold text-red-600 dark:text-red-400">
                                 {formatCurrency(expense.amount)}
-                              </span>{' '}
-                              หรือไม่?
-                              <br />
-                              <br />
-                              <span className="text-red-600 font-medium">
-                                การดำเนินการนี้ไม่สามารถย้อนกลับได้
                               </span>
+                              ?
                             </AlertDialogDescription>
                           </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel className="shadow-sm hover:shadow-md thai-text">
-                              ❌ ยกเลิก
+                          <AlertDialogFooter className="gap-2">
+                            <AlertDialogCancel className="h-9 px-4 text-sm thai-text">
+                              ยกเลิก
                             </AlertDialogCancel>
                             <AlertDialogAction
                               onClick={() => onDelete(expense.id)}
-                              className="bg-red-600 hover:bg-red-700 shadow-sm hover:shadow-md thai-text"
+                              className="h-9 px-4 bg-red-500 hover:bg-red-600 text-sm thai-text"
                             >
-                              🗑️ ลบ
+                              ลบ
                             </AlertDialogAction>
                           </AlertDialogFooter>
                         </AlertDialogContent>

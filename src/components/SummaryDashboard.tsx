@@ -1,5 +1,12 @@
 import { useMemo, useState } from 'react';
 import {
+  parseISO,
+  isWithinInterval,
+  startOfDay,
+  endOfDay,
+  subDays,
+} from 'date-fns';
+import {
   Card,
   CardContent,
   CardDescription,
@@ -27,15 +34,13 @@ export function SummaryDashboard({
 
   // Filter expenses by the main date range and only include pending expenses
   const filteredExpenses = useMemo(() => {
-    const startDate = new Date(dateRange.startDate);
-    const endDate = new Date(dateRange.endDate);
-    endDate.setHours(23, 59, 59, 999); // Include the entire end date
+    const start = startOfDay(parseISO(dateRange.startDate));
+    const end = endOfDay(parseISO(dateRange.endDate));
 
     return expenses.filter(expense => {
-      const expenseDate = new Date(expense.date);
+      const expenseDate = parseISO(expense.date);
       return (
-        expenseDate >= startDate &&
-        expenseDate <= endDate &&
+        isWithinInterval(expenseDate, { start, end }) &&
         expense.status === 'pending'
       );
     });
@@ -52,8 +57,7 @@ export function SummaryDashboard({
   };
 
   const getExpensesByPeriod = (period: 'today' | 'week' | 'month') => {
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const today = startOfDay(new Date());
 
     let startDate: Date;
     switch (period) {
@@ -61,27 +65,26 @@ export function SummaryDashboard({
         startDate = today;
         break;
       case 'week':
-        startDate = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+        startDate = subDays(today, 7);
         break;
       case 'month':
-        startDate = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+        startDate = subDays(today, 30);
         break;
     }
 
-    return expenses.filter(
-      expense =>
-        new Date(expense.date) >= startDate && expense.status === 'pending'
-    );
+    return expenses.filter(expense => {
+      const expenseDate = parseISO(expense.date);
+      return expenseDate >= startDate && expense.status === 'pending';
+    });
   };
 
   // Filter expenses by settlement date filter and only include pending expenses
   const getFilteredExpenses = (days: number) => {
-    const now = new Date();
-    const startDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
-    return expenses.filter(
-      expense =>
-        new Date(expense.date) >= startDate && expense.status === 'pending'
-    );
+    const startDate = subDays(new Date(), days);
+    return expenses.filter(expense => {
+      const expenseDate = parseISO(expense.date);
+      return expenseDate >= startDate && expense.status === 'pending';
+    });
   };
 
   const totalExpenses = filteredExpenses.reduce(

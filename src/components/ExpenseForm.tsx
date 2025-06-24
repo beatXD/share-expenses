@@ -3,6 +3,23 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
+import { Calendar } from '@/components/ui/calendar';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { CalendarIcon } from 'lucide-react';
+import {
+  format,
+  setHours,
+  setMinutes,
+  setSeconds,
+  setMilliseconds,
+  parseISO,
+} from 'date-fns';
+import { th } from 'date-fns/locale';
+import { TimePicker } from '@/components/ui/time-picker';
 import {
   Select,
   SelectContent,
@@ -17,9 +34,10 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 
 import { formatCurrency } from '@/lib/calculations';
-import type { User, Expense, ExpenseCategory, ExpenseStatus } from '@/types';
+import type { User, Expense } from '@/types';
 
 interface ExpenseFormProps {
   users: User[];
@@ -47,61 +65,15 @@ export function ExpenseForm({
   const [customSplits, setCustomSplits] = useState<Record<string, number>>(
     editingExpense?.customSplits || {}
   );
-  const [category, setCategory] = useState<ExpenseCategory>(
-    editingExpense?.category || 'other'
+  const [selectedDate, setSelectedDate] = useState<Date>(
+    editingExpense?.date ? parseISO(editingExpense.date) : new Date()
   );
-
-  // Utility functions for amount manipulation
-  const handleQuickAmount = (quickAmount: number, action: 'set' | 'add') => {
-    const currentAmount = parseFloat(amount) || 0;
-    const newAmount =
-      action === 'set' ? quickAmount : currentAmount + quickAmount;
-    setAmount(newAmount.toString());
-  };
-
-  const handleUtilityAction = (
-    action:
-      | 'add5'
-      | 'sub5'
-      | 'add10'
-      | 'sub10'
-      | 'add50'
-      | 'sub50'
-      | 'add100'
-      | 'sub100'
-  ) => {
-    const currentAmount = parseFloat(amount) || 0;
-    let newAmount = currentAmount;
-
-    switch (action) {
-      case 'add5':
-        newAmount = currentAmount + 5;
-        break;
-      case 'sub5':
-        newAmount = Math.max(0, currentAmount - 5);
-        break;
-      case 'add10':
-        newAmount = currentAmount + 10;
-        break;
-      case 'sub10':
-        newAmount = Math.max(0, currentAmount - 10);
-        break;
-      case 'add50':
-        newAmount = currentAmount + 50;
-        break;
-      case 'sub50':
-        newAmount = Math.max(0, currentAmount - 50);
-        break;
-      case 'add100':
-        newAmount = currentAmount + 100;
-        break;
-      case 'sub100':
-        newAmount = Math.max(0, currentAmount - 100);
-        break;
-    }
-
-    setAmount(newAmount.toString());
-  };
+  const [selectedTime, setSelectedTime] = useState<string>(
+    editingExpense?.date
+      ? format(parseISO(editingExpense.date), 'HH:mm')
+      : format(new Date(), 'HH:mm')
+  );
+  const [isDateOpen, setIsDateOpen] = useState(false);
 
   // Initialize slider values when amount or splitType changes
   useEffect(() => {
@@ -178,8 +150,7 @@ export function ExpenseForm({
       participants,
       splitType,
       customSplits: splitType === 'custom' ? customSplits : undefined,
-      date: editingExpense?.date || new Date().toISOString().split('T')[0],
-      category,
+      date: combineDateTime(selectedDate, selectedTime),
       status: editingExpense?.status || 'pending',
     };
 
@@ -192,94 +163,126 @@ export function ExpenseForm({
       setPaidBy('');
       setSplitType('equal');
       setCustomSplits({});
-      setCategory('other');
+      setSelectedDate(new Date()); // Reset to current date
+      setSelectedTime(format(new Date(), 'HH:mm')); // Reset to current time
     }
   };
 
   const totalAmount = parseFloat(amount) || 0;
 
-  // Category options
-  const categoryOptions = [
-    { value: 'food', label: '🍽️ อาหาร', emoji: '🍽️' },
-    { value: 'transport', label: '🚗 ขนส่ง', emoji: '🚗' },
-    { value: 'shopping', label: '🛒 ช็อปปิ้ง', emoji: '🛒' },
-    { value: 'entertainment', label: '🎬 บันเทิง', emoji: '🎬' },
-    { value: 'utilities', label: '💡 สาธารณูปโภค', emoji: '💡' },
-    { value: 'other', label: '📂 อื่นๆ', emoji: '📂' },
-  ] as const;
+  // Helper function to format date as DD/MM/YYYY
+  const formatDateToDDMMYYYY = (date: Date | undefined): string => {
+    if (!date) return '';
+    return format(date, 'dd/MM/yyyy');
+  };
+
+  // Helper function to combine date and time
+  const combineDateTime = (date: Date, time: string): string => {
+    const [hours, minutes] = time.split(':');
+
+    // Use date-fns to properly set time without timezone issues
+    let combinedDate = setSeconds(setMilliseconds(date, 0), 0);
+    combinedDate = setHours(combinedDate, parseInt(hours, 10));
+    combinedDate = setMinutes(combinedDate, parseInt(minutes, 10));
+
+    // Return in ISO format but maintain local time
+    return format(combinedDate, "yyyy-MM-dd'T'HH:mm:ss");
+  };
 
   return (
     <div className="w-full">
-      <Card className="shadow-xl border border-gray-200 bg-white rounded-2xl overflow-hidden">
-        <CardHeader className="py-6  bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-100">
-          <CardTitle className="text-2xl font-semibold text-gray-900 thai-text">
-            {editingExpense ? '✏️ แก้ไขรายจ่าย' : '➕ เพิ่มรายจ่าย'}
+      <Card className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-lg font-semibold text-gray-900 dark:text-white thai-text">
+            {editingExpense ? 'แก้ไขรายจ่าย' : 'เพิ่มรายจ่าย'}
           </CardTitle>
-          <CardDescription className="text-gray-600 thai-text">
-            กรอกข้อมูลรายจ่าย ทุกคนจะแบ่งกันโดยอัตโนมัติ
+          <CardDescription className="text-gray-600 dark:text-gray-400 thai-text text-sm">
+            กรอกข้อมูลรายจ่าย
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6 p-6">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Description and Category in same row */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Description Input */}
-              <div className="md:col-span-2 space-y-2">
-                <Label
-                  htmlFor="description"
-                  className="text-sm font-medium text-gray-900 thai-text"
-                >
-                  📝 รายการ
+        <CardContent className="space-y-4 p-6">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Description Input */}
+            <div className="space-y-2">
+              <Label
+                htmlFor="description"
+                className="text-sm font-medium text-gray-900 dark:text-white thai-text"
+              >
+                รายการ
+              </Label>
+              <Input
+                id="description"
+                placeholder="อาหารเที่ยง, ค่าน้ำมัน, ของใช้..."
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                className="h-9 text-sm border-gray-300 dark:border-gray-600 focus:border-emerald-500 focus:ring-emerald-500 dark:bg-gray-700 dark:text-white thai-text"
+              />
+            </div>
+
+            {/* Date and Time Selection */}
+            <div className="grid grid-cols-2 gap-4">
+              {/* Date Picker */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-gray-900 dark:text-white thai-text">
+                  วันที่
                 </Label>
-                <Input
-                  id="description"
-                  placeholder="อาหารเที่ยง, ค่าน้ำมัน, ของใช้..."
-                  value={description}
-                  onChange={e => setDescription(e.target.value)}
-                  className="h-11 border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 shadow-sm thai-text"
-                />
+                <Popover open={isDateOpen} onOpenChange={setIsDateOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        'w-full justify-start text-left h-9 text-sm border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white',
+                        !selectedDate && 'text-muted-foreground'
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-3 w-3" />
+                      {selectedDate ? (
+                        <span className="thai-text">
+                          {formatDateToDDMMYYYY(selectedDate)}
+                        </span>
+                      ) : (
+                        <span className="thai-text">เลือกวันที่</span>
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={selectedDate}
+                      onSelect={date => {
+                        if (date) {
+                          setSelectedDate(date);
+                          setIsDateOpen(false);
+                        }
+                      }}
+                      captionLayout="dropdown"
+                      locale={th}
+                      disabled={date => date > new Date()}
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
 
-              {/* Category Selection */}
+              {/* Time Input */}
               <div className="space-y-2">
-                <Label className="text-sm font-medium text-gray-900 thai-text">
-                  📂 หมวดหมู่
+                <Label className="text-sm font-medium text-gray-900 dark:text-white thai-text">
+                  เวลา
                 </Label>
-                <Select
-                  value={category}
-                  onValueChange={value => setCategory(value as ExpenseCategory)}
-                >
-                  <SelectTrigger className="h-11 border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 shadow-sm">
-                    <SelectValue
-                      placeholder="เลือกหมวดหมู่"
-                      className="thai-text"
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categoryOptions.map(cat => (
-                      <SelectItem
-                        key={cat.value}
-                        value={cat.value}
-                        className="thai-text"
-                      >
-                        <div className="flex items-center gap-2">
-                          <span>{cat.emoji}</span>
-                          <span>{cat.label.replace(/^.+\s/, '')}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <TimePicker
+                  value={selectedTime}
+                  onChange={setSelectedTime}
+                  placeholder="เลือกเวลา"
+                />
               </div>
             </div>
 
-            {/* Amount Input - Simplified */}
-            <div className="space-y-4">
+            {/* Amount Input */}
+            <div className="space-y-2">
               <Label
                 htmlFor="amount"
-                className="text-sm font-medium text-gray-900 thai-text"
+                className="text-sm font-medium text-gray-900 dark:text-white thai-text"
               >
-                💰 จำนวนเงิน (บาท)
+                จำนวนเงิน (บาท)
               </Label>
               <div className="relative">
                 <Input
@@ -289,89 +292,21 @@ export function ExpenseForm({
                   placeholder="0"
                   value={amount}
                   onChange={e => setAmount(e.target.value)}
-                  className="h-12 text-lg border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 pl-8 shadow-sm font-semibold"
+                  className="h-9 text-sm border-gray-300 dark:border-gray-600 focus:border-emerald-500 focus:ring-emerald-500 pl-8 dark:bg-gray-700 dark:text-white font-medium"
                 />
-                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-lg font-bold">
+                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-emerald-500 text-sm font-medium">
                   ฿
                 </span>
-              </div>
-
-              {/* Simplified Quick Amount Buttons */}
-              <div className="space-y-3 p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl border border-gray-200 shadow-sm">
-                <div className="text-sm font-medium text-gray-700 thai-text flex items-center gap-2">
-                  ⚡ เลือกจำนวนเงิน
-                  {totalAmount > 0 && (
-                    <span className="ml-auto text-lg font-bold text-blue-600">
-                      {formatCurrency(totalAmount)}
-                    </span>
-                  )}
-                </div>
-
-                {/* Popular amounts only */}
-                <div className="grid grid-cols-4 gap-2">
-                  {[20, 50, 100, 150, 200, 300, 500, 1000].map(quickAmount => (
-                    <Button
-                      key={quickAmount}
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleQuickAmount(quickAmount, 'set')}
-                      className="h-9 text-sm font-medium border-gray-300 hover:border-blue-500 hover:text-blue-600 hover:shadow-sm transition-all duration-200 thai-text bg-white"
-                    >
-                      ฿{quickAmount}
-                    </Button>
-                  ))}
-                </div>
-
-                {/* Simple utility buttons */}
-                <div className="grid grid-cols-4 gap-2 pt-2 border-t border-gray-300">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleUtilityAction('sub10')}
-                    className="h-8 text-xs border-red-300 hover:border-red-500 hover:text-red-600 thai-text"
-                  >
-                    -10
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleUtilityAction('add10')}
-                    className="h-8 text-xs border-green-300 hover:border-green-500 hover:text-green-600 thai-text"
-                  >
-                    +10
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleUtilityAction('sub50')}
-                    className="h-8 text-xs border-red-300 hover:border-red-500 hover:text-red-600 thai-text"
-                  >
-                    -50
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleUtilityAction('add50')}
-                    className="h-8 text-xs border-green-300 hover:border-green-500 hover:text-green-600 thai-text"
-                  >
-                    +50
-                  </Button>
-                </div>
               </div>
             </div>
 
             {/* Paid By Selection */}
             <div className="space-y-2">
-              <Label className="text-sm font-medium text-gray-900 thai-text">
-                👤 ใครจ่าย
+              <Label className="text-sm font-medium text-gray-900 dark:text-white thai-text">
+                ใครจ่าย
               </Label>
               <Select value={paidBy} onValueChange={setPaidBy}>
-                <SelectTrigger className="h-11 border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 shadow-sm">
+                <SelectTrigger className="h-9 border-gray-300 dark:border-gray-600 focus:border-emerald-500 focus:ring-emerald-500 dark:bg-gray-700 dark:text-white text-sm">
                   <SelectValue
                     placeholder="เลือกผู้จ่าย"
                     className="thai-text"
@@ -398,26 +333,34 @@ export function ExpenseForm({
             </div>
 
             {/* Split Type Selection */}
-            <div className="space-y-3">
-              <Label className="text-sm font-medium text-gray-900 thai-text">
-                ⚖️ วิธีแบ่ง
+            <div className="space-y-2">
+              <Label className="text-sm font-medium text-gray-900 dark:text-white thai-text">
+                วิธีแบ่ง
               </Label>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2">
                 <Button
                   type="button"
                   variant={splitType === 'equal' ? 'default' : 'outline'}
                   onClick={() => setSplitType('equal')}
-                  className="h-11 justify-center shadow-sm hover:shadow-md transition-all duration-200 thai-text"
+                  className={`h-9 text-sm thai-text ${
+                    splitType === 'equal'
+                      ? 'bg-emerald-500 hover:bg-emerald-600 text-white'
+                      : 'border-gray-300 dark:border-gray-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20'
+                  }`}
                 >
-                  🤝 แบ่งเท่าๆ กัน
+                  แบ่งเท่าๆ กัน
                 </Button>
                 <Button
                   type="button"
                   variant={splitType === 'custom' ? 'default' : 'outline'}
                   onClick={() => setSplitType('custom')}
-                  className="h-11 justify-center shadow-sm hover:shadow-md transition-all duration-200 thai-text"
+                  className={`h-9 text-sm thai-text ${
+                    splitType === 'custom'
+                      ? 'bg-emerald-500 hover:bg-emerald-600 text-white'
+                      : 'border-gray-300 dark:border-gray-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20'
+                  }`}
                 >
-                  🎯 กำหนดเอง
+                  กำหนดเอง
                 </Button>
               </div>
             </div>
@@ -534,21 +477,21 @@ export function ExpenseForm({
             )}
 
             {/* Action Buttons */}
-            <div className="flex gap-3 pt-4 border-t border-gray-100">
+            <div className="flex gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
               <Button
                 type="submit"
-                className="flex-1 h-11 shadow-md hover:shadow-lg transition-all duration-200 thai-text"
+                className="flex-1 h-9 bg-emerald-500 hover:bg-emerald-600 text-white text-sm thai-text"
               >
-                {editingExpense ? '💾 บันทึก' : '✨ เพิ่มรายจ่าย'}
+                {editingExpense ? 'บันทึก' : 'เพิ่มรายจ่าย'}
               </Button>
               {onCancel && (
                 <Button
                   type="button"
                   variant="outline"
                   onClick={onCancel}
-                  className="h-11 px-6 shadow-sm hover:shadow-md transition-all duration-200 thai-text"
+                  className="h-9 px-4 text-sm border-gray-300 dark:border-gray-600 thai-text dark:text-gray-300"
                 >
-                  ❌ ยกเลิก
+                  ยกเลิก
                 </Button>
               )}
             </div>

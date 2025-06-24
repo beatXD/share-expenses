@@ -1,4 +1,15 @@
 import { useState } from 'react';
+import {
+  format,
+  parseISO,
+  isWithinInterval,
+  startOfDay,
+  endOfDay,
+  subDays,
+  min,
+  max,
+  differenceInDays,
+} from 'date-fns';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -23,13 +34,12 @@ export function ExportData({ expenses, users, dateRange }: ExportDataProps) {
 
   // Filter expenses by the main date range
   const mainFilteredExpenses = (() => {
-    const startDate = new Date(dateRange.startDate);
-    const endDate = new Date(dateRange.endDate);
-    endDate.setHours(23, 59, 59, 999); // Include the entire end date
+    const start = startOfDay(parseISO(dateRange.startDate));
+    const end = endOfDay(parseISO(dateRange.endDate));
 
     return expenses.filter(expense => {
-      const expenseDate = new Date(expense.date);
-      return expenseDate >= startDate && expenseDate <= endDate;
+      const expenseDate = parseISO(expense.date);
+      return isWithinInterval(expenseDate, { start, end });
     });
   })();
 
@@ -38,23 +48,13 @@ export function ExportData({ expenses, users, dateRange }: ExportDataProps) {
     return user?.name || 'Unknown';
   };
 
-  const getCategoryLabel = (category: string) => {
-    const categoryMap: Record<string, string> = {
-      food: 'อาหาร',
-      transport: 'ขนส่ง',
-      shopping: 'ช็อปปิ้ง',
-      entertainment: 'บันเทิง',
-      utilities: 'สาธารณูปโภค',
-      other: 'อื่นๆ',
-    };
-    return categoryMap[category] || 'อื่นๆ';
-  };
-
   // Filter expenses by date
   const getFilteredExpenses = (days: number) => {
-    const now = new Date();
-    const startDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
-    return expenses.filter(expense => new Date(expense.date) >= startDate);
+    const startDate = subDays(new Date(), days);
+    return expenses.filter(expense => {
+      const expenseDate = parseISO(expense.date);
+      return expenseDate >= startDate;
+    });
   };
 
   const downloadFile = (content: string, filename: string, type: string) => {
@@ -82,9 +82,9 @@ export function ExportData({ expenses, users, dateRange }: ExportDataProps) {
     ];
 
     const rows = mainFilteredExpenses.map(expense => {
-      const date = new Date(expense.date).toLocaleDateString('th-TH');
+      const date = format(parseISO(expense.date), 'dd/MM/yyyy');
       const paidBy = getUserName(expense.paidBy);
-      const category = getCategoryLabel(expense.category);
+      const category = 'ทั่วไป'; // Default category since category field doesn't exist
       const status = expense.status === 'settled' ? 'เคลียแล้ว' : 'รอเคลีย';
       const splitType =
         expense.splitType === 'equal' ? 'แบ่งเท่าๆ กัน' : 'กำหนดเอง';
@@ -129,18 +129,18 @@ export function ExportData({ expenses, users, dateRange }: ExportDataProps) {
   };
 
   const exportToJSON = () => {
+    const start = startOfDay(parseISO(dateRange.startDate));
+    const end = endOfDay(parseISO(dateRange.endDate));
+
     const jsonFilteredExpenses = getFilteredExpenses(exportDateFilter).filter(
       expense => {
-        const startDate = new Date(dateRange.startDate);
-        const endDate = new Date(dateRange.endDate);
-        endDate.setHours(23, 59, 59, 999);
-        const expenseDate = new Date(expense.date);
-        return expenseDate >= startDate && expenseDate <= endDate;
+        const expenseDate = parseISO(expense.date);
+        return isWithinInterval(expenseDate, { start, end });
       }
     );
 
     const exportData = {
-      exportDate: new Date().toISOString(),
+      exportDate: format(new Date(), "yyyy-MM-dd'T'HH:mm:ss.SSSxxx"),
       dateRange: `${exportDateFilter} วันล่าสุด`,
       summary: {
         totalExpenses: jsonFilteredExpenses.length,
@@ -159,8 +159,8 @@ export function ExportData({ expenses, users, dateRange }: ExportDataProps) {
         amount: expense.amount,
         paidBy: expense.paidBy,
         paidByName: getUserName(expense.paidBy),
-        category: expense.category,
-        categoryLabel: getCategoryLabel(expense.category),
+        category: 'general',
+        categoryLabel: 'ทั่วไป',
         status: expense.status,
         statusLabel: expense.status === 'settled' ? 'เคลียแล้ว' : 'รอเคลีย',
         splitType: expense.splitType,
@@ -191,106 +191,108 @@ export function ExportData({ expenses, users, dateRange }: ExportDataProps) {
   );
   const oldestExpense =
     mainFilteredExpenses.length > 0
-      ? new Date(
-          Math.min(...mainFilteredExpenses.map(e => new Date(e.date).getTime()))
-        )
+      ? min(mainFilteredExpenses.map(e => parseISO(e.date)))
       : null;
   const newestExpense =
     mainFilteredExpenses.length > 0
-      ? new Date(
-          Math.max(...mainFilteredExpenses.map(e => new Date(e.date).getTime()))
-        )
+      ? max(mainFilteredExpenses.map(e => parseISO(e.date)))
       : null;
 
   return (
-    <div className="space-y-6">
-      <Card className="shadow-xl border border-gray-200 bg-white rounded-2xl overflow-hidden">
-        <CardHeader className="py-4 bg-gradient-to-r from-indigo-50 to-blue-50 border-b border-gray-100">
-          <CardTitle className="text-xl font-semibold text-gray-900 thai-text">
-            📊 ส่งออก/นำเข้าข้อมูล
+    <div className="space-y-4">
+      <Card className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-lg font-semibold text-gray-900 dark:text-white thai-text">
+            ส่งออก/นำเข้าข้อมูล
           </CardTitle>
-          <CardDescription className="text-gray-600 thai-text">
+          <CardDescription className="text-gray-600 dark:text-gray-400 thai-text text-sm">
             บันทึกข้อมูลสำหรับสำรองหรือวิเคราะห์ต่อ
           </CardDescription>
         </CardHeader>
         <CardContent className="p-6">
           {/* Data Summary */}
-          <div className="mb-6 p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl border border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900 mb-3 thai-text">
-              📋 ข้อมูลปัจจุบัน
+          <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 thai-text">
+              ข้อมูลปัจจุบัน
             </h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
               <div className="text-center">
-                <div className="text-2xl font-bold text-blue-600">
+                <div className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
                   {mainFilteredExpenses.length}
                 </div>
-                <div className="text-gray-600 thai-text">รายจ่าย</div>
+                <div className="text-gray-600 dark:text-gray-400 thai-text">
+                  รายจ่าย
+                </div>
               </div>
               <div className="text-center">
-                <div className="text-2xl font-bold text-green-600">
+                <div className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
                   {formatCurrency(totalAmount)}
                 </div>
-                <div className="text-gray-600 thai-text">ยอดรวม</div>
+                <div className="text-gray-600 dark:text-gray-400 thai-text">
+                  ยอดรวม
+                </div>
               </div>
               <div className="text-center">
-                <div className="text-2xl font-bold text-purple-600">
+                <div className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
                   {users.length}
                 </div>
-                <div className="text-gray-600 thai-text">ผู้ใช้</div>
+                <div className="text-gray-600 dark:text-gray-400 thai-text">
+                  ผู้ใช้
+                </div>
               </div>
               <div className="text-center">
-                <div className="text-lg font-bold text-orange-600">
+                <div className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
                   {oldestExpense &&
                   newestExpense &&
                   oldestExpense.getTime() !== newestExpense.getTime()
-                    ? `${Math.ceil((newestExpense.getTime() - oldestExpense.getTime()) / (1000 * 60 * 60 * 24))} วัน`
+                    ? `${differenceInDays(newestExpense, oldestExpense) + 1} วัน`
                     : mainFilteredExpenses.length > 0
                       ? '1 วัน'
                       : '0 วัน'}
                 </div>
-                <div className="text-gray-600 thai-text">ช่วงเวลา</div>
+                <div className="text-gray-600 dark:text-gray-400 thai-text">
+                  ช่วงเวลา
+                </div>
               </div>
             </div>
           </div>
 
           {/* Export Options */}
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold text-gray-900 thai-text">
-              📤 ส่งออกข้อมูล
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white thai-text">
+              ส่งออกข้อมูล
             </h3>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {/* CSV Export */}
-              <div className="p-4 border border-gray-200 rounded-xl hover:shadow-md transition-all duration-200">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="text-2xl">📊</div>
+              <div className="p-3 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700">
+                <div className="flex items-center gap-2 mb-2">
                   <div>
-                    <h4 className="font-semibold text-gray-900 thai-text">
+                    <h4 className="text-sm font-semibold text-gray-900 dark:text-white thai-text">
                       CSV (Excel)
                     </h4>
-                    <p className="text-sm text-gray-600 thai-text">
+                    <p className="text-xs text-gray-600 dark:text-gray-400 thai-text">
                       เปิดใน Excel, Google Sheets
                     </p>
                   </div>
                 </div>
                 <Button
                   onClick={exportToCSV}
-                  className="w-full shadow-sm hover:shadow-md transition-all duration-200 thai-text"
+                  className="w-full h-9 bg-emerald-500 hover:bg-emerald-600 text-sm thai-text"
                   disabled={mainFilteredExpenses.length === 0}
                 >
-                  💾 ดาวน์โหลด CSV ({mainFilteredExpenses.length} รายการ)
+                  ดาวน์โหลด CSV ({mainFilteredExpenses.length} รายการ)
                 </Button>
               </div>
 
               {/* JSON Export */}
-              <div className="p-4 border border-gray-200 rounded-xl hover:shadow-md transition-all duration-200">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="text-2xl">🔧</div>
+              <div className="p-3 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700">
+                <div className="flex items-center gap-2 mb-2">
                   <div>
-                    <h4 className="font-semibold text-gray-900 thai-text">
+                    <h4 className="text-sm font-semibold text-gray-900 dark:text-white thai-text">
                       JSON (ข้อมูลดิบ)
                     </h4>
-                    <p className="text-sm text-gray-600 thai-text">
+                    <p className="text-xs text-gray-600 dark:text-gray-400 thai-text">
                       ช่วง {exportDateFilter} วันล่าสุด
                     </p>
                   </div>
@@ -298,8 +300,8 @@ export function ExportData({ expenses, users, dateRange }: ExportDataProps) {
 
                 {/* Date Filter for JSON Export */}
                 <div className="mb-3">
-                  <div className="text-xs text-gray-600 mb-2 thai-text">
-                    📅 ช่วงเวลา
+                  <div className="text-xs text-gray-600 dark:text-gray-400 mb-2 thai-text">
+                    ช่วงเวลา
                   </div>
                   <Tabs
                     value={exportDateFilter.toString()}
@@ -307,34 +309,34 @@ export function ExportData({ expenses, users, dateRange }: ExportDataProps) {
                       setExportDateFilter(parseInt(value))
                     }
                   >
-                    <TabsList className="grid w-full grid-cols-5 bg-gray-100 shadow-inner rounded-lg p-1 h-8">
+                    <TabsList className="grid w-full grid-cols-5 bg-gray-100 dark:bg-gray-600 rounded-lg p-1 h-7">
                       <TabsTrigger
                         value="3"
-                        className="text-xs thai-text rounded data-[state=active]:shadow-sm"
+                        className="text-xs thai-text rounded h-6"
                       >
                         3 วัน
                       </TabsTrigger>
                       <TabsTrigger
                         value="7"
-                        className="text-xs thai-text rounded data-[state=active]:shadow-sm"
+                        className="text-xs thai-text rounded h-6"
                       >
                         7 วัน
                       </TabsTrigger>
                       <TabsTrigger
                         value="15"
-                        className="text-xs thai-text rounded data-[state=active]:shadow-sm"
+                        className="text-xs thai-text rounded h-6"
                       >
                         15 วัน
                       </TabsTrigger>
                       <TabsTrigger
                         value="30"
-                        className="text-xs thai-text rounded data-[state=active]:shadow-sm"
+                        className="text-xs thai-text rounded h-6"
                       >
                         30 วัน
                       </TabsTrigger>
                       <TabsTrigger
                         value="365"
-                        className="text-xs thai-text rounded data-[state=active]:shadow-sm"
+                        className="text-xs thai-text rounded h-6"
                       >
                         ทั้งหมด
                       </TabsTrigger>
@@ -345,19 +347,20 @@ export function ExportData({ expenses, users, dateRange }: ExportDataProps) {
                 <Button
                   onClick={exportToJSON}
                   variant="outline"
-                  className="w-full shadow-sm hover:shadow-md transition-all duration-200 thai-text"
+                  className="w-full h-9 text-sm border-emerald-200 hover:bg-emerald-50 dark:border-emerald-800 dark:hover:bg-emerald-900/20 thai-text"
                   disabled={mainFilteredExpenses.length === 0}
                 >
-                  💾 ดาวน์โหลด JSON (
-                  {
-                    getFilteredExpenses(exportDateFilter).filter(expense => {
-                      const startDate = new Date(dateRange.startDate);
-                      const endDate = new Date(dateRange.endDate);
-                      endDate.setHours(23, 59, 59, 999);
-                      const expenseDate = new Date(expense.date);
-                      return expenseDate >= startDate && expenseDate <= endDate;
-                    }).length
-                  }{' '}
+                  ดาวน์โหลด JSON (
+                  {(() => {
+                    const start = startOfDay(parseISO(dateRange.startDate));
+                    const end = endOfDay(parseISO(dateRange.endDate));
+                    return getFilteredExpenses(exportDateFilter).filter(
+                      expense => {
+                        const expenseDate = parseISO(expense.date);
+                        return isWithinInterval(expenseDate, { start, end });
+                      }
+                    ).length;
+                  })()}{' '}
                   รายการ)
                 </Button>
               </div>
@@ -365,9 +368,9 @@ export function ExportData({ expenses, users, dateRange }: ExportDataProps) {
           </div>
 
           {mainFilteredExpenses.length === 0 && (
-            <div className="mt-6 p-4 bg-gray-50 border border-gray-200 rounded-lg text-center">
-              <p className="text-gray-600 thai-text">
-                📝 ไม่มีข้อมูลรายจ่ายในช่วงวันที่ที่เลือก
+            <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg text-center">
+              <p className="text-sm text-amber-700 dark:text-amber-400 thai-text">
+                ไม่มีข้อมูลรายจ่ายในช่วงวันที่ที่เลือก
                 ลองเปลี่ยนช่วงวันที่หรือเพิ่มรายจ่าย
               </p>
             </div>

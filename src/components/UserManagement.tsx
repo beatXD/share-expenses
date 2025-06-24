@@ -116,38 +116,41 @@ export function UserManagement({ users, onUsersChange }: UserManagementProps) {
   };
 
   return (
-    <div className="space-y-6">
-      <Card className="shadow-xl border border-gray-200 bg-white rounded-2xl overflow-hidden">
-        <CardHeader className="py-4 bg-gradient-to-r from-purple-50 to-pink-50 border-b border-gray-100">
-          <CardTitle className="text-xl font-semibold text-gray-900 thai-text">
-            👥 จัดการผู้ใช้
+    <div className="space-y-4">
+      <Card className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-lg font-semibold text-gray-900 dark:text-white thai-text">
+            จัดการผู้ใช้
           </CardTitle>
-          <CardDescription className="text-gray-600 thai-text">
+          <CardDescription className="text-gray-600 dark:text-gray-400 thai-text text-sm">
             เพิ่ม แก้ไข หรือลบผู้ใช้ในระบบ
           </CardDescription>
         </CardHeader>
         <CardContent className="p-6">
           {/* Add User Button */}
-          <div className="mb-6">
+          <div className="mb-4">
             <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
               <DialogTrigger asChild>
-                <Button className="shadow-md hover:shadow-lg transition-all duration-200 thai-text">
-                  ➕ เพิ่มผู้ใช้ใหม่
+                <Button className="h-9 bg-emerald-500 hover:bg-emerald-600 text-white text-sm thai-text">
+                  เพิ่มผู้ใช้ใหม่
                 </Button>
               </DialogTrigger>
-              <DialogContent className="rounded-2xl shadow-2xl border border-gray-200">
+              <DialogContent className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
                 <DialogHeader>
-                  <DialogTitle className="text-xl font-bold thai-text">
-                    👤 เพิ่มผู้ใช้ใหม่
+                  <DialogTitle className="text-lg font-semibold text-gray-900 dark:text-white thai-text">
+                    เพิ่มผู้ใช้ใหม่
                   </DialogTitle>
-                  <DialogDescription className="thai-text">
+                  <DialogDescription className="text-sm text-gray-600 dark:text-gray-400 thai-text">
                     กรอกข้อมูลผู้ใช้ใหม่ที่ต้องการเพิ่ม
                   </DialogDescription>
                 </DialogHeader>
 
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="name" className="thai-text">
+                    <Label
+                      htmlFor="name"
+                      className="text-sm font-medium text-gray-900 dark:text-white thai-text"
+                    >
                       ชื่อผู้ใช้
                     </Label>
                     <Input
@@ -155,21 +158,23 @@ export function UserManagement({ users, onUsersChange }: UserManagementProps) {
                       placeholder="เช่น จอห์น, มารี..."
                       value={newUserName}
                       onChange={e => setNewUserName(e.target.value)}
-                      className="thai-text"
+                      className="h-9 text-sm border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white thai-text"
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <Label className="thai-text">สีประจำตัว</Label>
+                    <Label className="text-sm font-medium text-gray-900 dark:text-white thai-text">
+                      สีประจำตัว
+                    </Label>
                     <div className="grid grid-cols-6 gap-2">
                       {DEFAULT_COLORS.map(color => (
                         <button
                           key={color}
                           onClick={() => setNewUserColor(color)}
-                          className={`w-10 h-10 rounded-full border-2 transition-all duration-200 ${
+                          className={`w-8 h-8 rounded-full border-2 transition-colors ${
                             newUserColor === color
-                              ? 'border-gray-800 scale-110 shadow-lg'
-                              : 'border-gray-300 hover:border-gray-500'
+                              ? 'border-gray-800 dark:border-gray-200'
+                              : 'border-gray-300 dark:border-gray-600 hover:border-gray-500'
                           }`}
                           style={{ backgroundColor: color }}
                         />
@@ -178,16 +183,19 @@ export function UserManagement({ users, onUsersChange }: UserManagementProps) {
                   </div>
                 </div>
 
-                <DialogFooter>
+                <DialogFooter className="gap-2">
                   <Button
                     variant="outline"
                     onClick={() => setIsAddDialogOpen(false)}
-                    className="thai-text"
+                    className="h-9 px-4 text-sm thai-text"
                   >
                     ยกเลิก
                   </Button>
-                  <Button onClick={handleAddUser} className="thai-text">
-                    ✅ เพิ่ม
+                  <Button
+                    onClick={handleAddUser}
+                    className="h-9 px-4 bg-emerald-500 hover:bg-emerald-600 text-sm thai-text"
+                  >
+                    เพิ่ม
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -195,23 +203,23 @@ export function UserManagement({ users, onUsersChange }: UserManagementProps) {
           </div>
 
           {/* Users List */}
-          <div className="space-y-3">
+          <div className="space-y-2">
             {users.map(user => (
               <div
                 key={user.id}
-                className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl shadow-sm border border-gray-200"
+                className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600"
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                   <div
-                    className="w-6 h-6 rounded-full shadow-md border-2 border-white"
+                    className="w-4 h-4 rounded-full"
                     style={{ backgroundColor: user.color }}
                   />
-                  <span className="font-medium text-lg text-gray-900 thai-text">
+                  <span className="font-medium text-sm text-gray-900 dark:text-white thai-text">
                     {user.name}
                   </span>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
                   {/* Edit User */}
                   <Dialog
                     open={editingUser?.id === user.id}
@@ -222,24 +230,27 @@ export function UserManagement({ users, onUsersChange }: UserManagementProps) {
                         variant="outline"
                         size="sm"
                         onClick={() => handleEditUser(user)}
-                        className="h-9 px-3 text-sm shadow-sm hover:shadow-md transition-all duration-200 thai-text"
+                        className="h-7 px-2 text-xs border-gray-300 dark:border-gray-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 thai-text"
                       >
-                        ✏️ แก้ไข
+                        แก้ไข
                       </Button>
                     </DialogTrigger>
-                    <DialogContent className="rounded-2xl shadow-2xl border border-gray-200">
+                    <DialogContent className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
                       <DialogHeader>
-                        <DialogTitle className="text-xl font-bold thai-text">
-                          ✏️ แก้ไขผู้ใช้
+                        <DialogTitle className="text-lg font-semibold text-gray-900 dark:text-white thai-text">
+                          แก้ไขผู้ใช้
                         </DialogTitle>
-                        <DialogDescription className="thai-text">
+                        <DialogDescription className="text-sm text-gray-600 dark:text-gray-400 thai-text">
                           แก้ไขข้อมูลของ {user.name}
                         </DialogDescription>
                       </DialogHeader>
 
                       <div className="space-y-4">
                         <div className="space-y-2">
-                          <Label htmlFor="edit-name" className="thai-text">
+                          <Label
+                            htmlFor="edit-name"
+                            className="text-sm font-medium text-gray-900 dark:text-white thai-text"
+                          >
                             ชื่อผู้ใช้
                           </Label>
                           <Input
@@ -247,21 +258,23 @@ export function UserManagement({ users, onUsersChange }: UserManagementProps) {
                             placeholder="เช่น จอห์น, มารี..."
                             value={newUserName}
                             onChange={e => setNewUserName(e.target.value)}
-                            className="thai-text"
+                            className="h-9 text-sm border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white thai-text"
                           />
                         </div>
 
                         <div className="space-y-2">
-                          <Label className="thai-text">สีประจำตัว</Label>
+                          <Label className="text-sm font-medium text-gray-900 dark:text-white thai-text">
+                            สีประจำตัว
+                          </Label>
                           <div className="grid grid-cols-6 gap-2">
                             {DEFAULT_COLORS.map(color => (
                               <button
                                 key={color}
                                 onClick={() => setNewUserColor(color)}
-                                className={`w-10 h-10 rounded-full border-2 transition-all duration-200 ${
+                                className={`w-8 h-8 rounded-full border-2 transition-colors ${
                                   newUserColor === color
-                                    ? 'border-gray-800 scale-110 shadow-lg'
-                                    : 'border-gray-300 hover:border-gray-500'
+                                    ? 'border-gray-800 dark:border-gray-200'
+                                    : 'border-gray-300 dark:border-gray-600 hover:border-gray-500'
                                 }`}
                                 style={{ backgroundColor: color }}
                               />
@@ -270,19 +283,19 @@ export function UserManagement({ users, onUsersChange }: UserManagementProps) {
                         </div>
                       </div>
 
-                      <DialogFooter>
+                      <DialogFooter className="gap-2">
                         <Button
                           variant="outline"
                           onClick={handleCancelEdit}
-                          className="thai-text"
+                          className="h-9 px-4 text-sm thai-text"
                         >
                           ยกเลิก
                         </Button>
                         <Button
                           onClick={handleUpdateUser}
-                          className="thai-text"
+                          className="h-9 px-4 bg-emerald-500 hover:bg-emerald-600 text-sm thai-text"
                         >
-                          💾 บันทึก
+                          บันทึก
                         </Button>
                       </DialogFooter>
                     </DialogContent>
@@ -294,36 +307,31 @@ export function UserManagement({ users, onUsersChange }: UserManagementProps) {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-9 px-3 text-sm text-red-600 border-red-200 hover:bg-red-50 shadow-sm hover:shadow-md transition-all duration-200 thai-text"
+                        className="h-7 px-2 text-xs text-red-600 dark:text-red-400 border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/20 thai-text"
                         disabled={users.length <= 2}
                       >
-                        🗑️ ลบ
+                        ลบ
                       </Button>
                     </AlertDialogTrigger>
-                    <AlertDialogContent className="rounded-2xl shadow-2xl border border-gray-200">
+                    <AlertDialogContent className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
                       <AlertDialogHeader>
-                        <AlertDialogTitle className="text-xl font-bold thai-text">
-                          ⚠️ ยืนยันการลบ
+                        <AlertDialogTitle className="text-lg font-semibold text-gray-900 dark:text-white thai-text">
+                          ยืนยันการลบ
                         </AlertDialogTitle>
-                        <AlertDialogDescription className="text-base thai-text">
-                          คุณต้องการลบผู้ใช้ "{user.name}" หรือไม่?
-                          <br />
-                          <br />
-                          <span className="text-red-600 font-medium">
-                            การดำเนินการนี้ไม่สามารถย้อนกลับได้
-                            และจะส่งผลต่อข้อมูลรายจ่ายที่เกี่ยวข้อง
-                          </span>
+                        <AlertDialogDescription className="text-sm text-gray-600 dark:text-gray-400 thai-text">
+                          ลบผู้ใช้ "{user.name}"?
+                          การดำเนินการนี้ไม่สามารถย้อนกลับได้
                         </AlertDialogDescription>
                       </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel className="thai-text">
-                          ❌ ยกเลิก
+                      <AlertDialogFooter className="gap-2">
+                        <AlertDialogCancel className="h-9 px-4 text-sm thai-text">
+                          ยกเลิก
                         </AlertDialogCancel>
                         <AlertDialogAction
                           onClick={() => handleDeleteUser(user.id)}
-                          className="bg-red-600 hover:bg-red-700 thai-text"
+                          className="h-9 px-4 bg-red-500 hover:bg-red-600 text-sm thai-text"
                         >
-                          🗑️ ลบ
+                          ลบ
                         </AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
@@ -334,9 +342,9 @@ export function UserManagement({ users, onUsersChange }: UserManagementProps) {
           </div>
 
           {users.length <= 2 && (
-            <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-              <p className="text-sm text-amber-700 thai-text">
-                💡 หมายเหตุ: ต้องมีผู้ใช้อย่างน้อย 2 คนในระบบ
+            <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+              <p className="text-sm text-amber-700 dark:text-amber-400 thai-text">
+                หมายเหตุ: ต้องมีผู้ใช้อย่างน้อย 2 คนในระบบ
               </p>
             </div>
           )}

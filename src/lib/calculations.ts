@@ -1,3 +1,4 @@
+import { parseISO, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
 import type { Expense, User, Settlement, Summary } from '@/types';
 
 export function calculateSplits(expense: Expense): Record<string, number> {
@@ -94,18 +95,19 @@ export function calculateSettlements(
   return settlements;
 }
 
-export function generateSummary(
+export function calculateSummary(
   expenses: Expense[],
   users: User[],
-  period: 'daily' | 'weekly' | 'monthly',
   startDate: string,
   endDate: string
 ): Summary {
+  // Filter expenses by date range using date-fns
+  const start = startOfDay(parseISO(startDate));
+  const end = endOfDay(parseISO(endDate));
+
   const filteredExpenses = expenses.filter(expense => {
-    const expenseDate = new Date(expense.date);
-    return (
-      expenseDate >= new Date(startDate) && expenseDate <= new Date(endDate)
-    );
+    const expenseDate = parseISO(expense.date);
+    return isWithinInterval(expenseDate, { start, end });
   });
 
   // Only include pending expenses in summary calculations
@@ -131,7 +133,7 @@ export function generateSummary(
     totalExpenses,
     userTotals,
     settlements,
-    period,
+    period: 'daily',
     startDate,
     endDate,
   };

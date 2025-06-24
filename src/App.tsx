@@ -1,295 +1,84 @@
 import { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
 import { ExpenseForm } from '@/components/ExpenseForm';
 import { ExpenseList } from '@/components/ExpenseList';
 import { UserManagement } from '@/components/UserManagement';
 import { ExportData } from '@/components/ExportData';
+import { useTheme } from '@/contexts/ThemeContext';
+import { startOfWeek, endOfWeek, format } from 'date-fns';
+import { Moon, Sun } from 'lucide-react';
 import type { DateRange } from '@/components/ui/date-range-picker';
-import type { User, Expense, ExpenseCategory, ExpenseStatus } from '@/types';
+import type { User, Expense, ExpenseStatus } from '@/types';
 
 const DEFAULT_USERS: User[] = [
   { id: '1', name: 'BEAT', color: '#3b82f6' },
   { id: '2', name: 'NART', color: '#ef4444' },
 ];
 
-// Sample expenses for the past month
-const generateSampleExpenses = (): Expense[] => {
-  const today = new Date();
-  const expenses: Expense[] = [];
+// Interface for JSON data structure
+interface JsonData {
+  exportDate: string;
+  version: string;
+  users: User[];
+  expenses: Expense[];
+}
 
-  // Helper function to get random date in the past month
-  const getRandomDateInPastMonth = (daysAgo: number) => {
-    const date = new Date(today.getTime() - daysAgo * 24 * 60 * 60 * 1000);
-    return date.toISOString().split('T')[0];
-  };
-
-  // Sample data with realistic expenses
-  const sampleData = [
-    // Week 1 (1-7 days ago)
-    {
-      description: 'ข้าวผัดกุ้ง ร้านลุงสมชาย',
-      amount: 180,
-      paidBy: '1',
-      category: 'food',
-      daysAgo: 1,
-    },
-    {
-      description: 'แกรบแท็กซี่ไปเซ็นทรัล',
-      amount: 95,
-      paidBy: '2',
-      category: 'transport',
-      daysAgo: 1,
-    },
-    {
-      description: 'กาแฟ Amazon Coffee',
-      amount: 140,
-      paidBy: '1',
-      category: 'food',
-      daysAgo: 2,
-    },
-    {
-      description: 'ซื้อเสื้อผ้า Uniqlo',
-      amount: 1290,
-      paidBy: '2',
-      category: 'shopping',
-      daysAgo: 3,
-    },
-    {
-      description: 'อาหารเย็น MK สุกี้',
-      amount: 580,
-      paidBy: '1',
-      category: 'food',
-      daysAgo: 3,
-    },
-    {
-      description: 'ค่าน้ำมันรถ PTT',
-      amount: 800,
-      paidBy: '2',
-      category: 'transport',
-      daysAgo: 4,
-    },
-    {
-      description: 'ดูหนัง Major Cineplex',
-      amount: 360,
-      paidBy: '1',
-      category: 'entertainment',
-      daysAgo: 5,
-    },
-    {
-      description: 'ข้าวเที่ยง ศูนย์อาหาร',
-      amount: 120,
-      paidBy: '2',
-      category: 'food',
-      daysAgo: 6,
-    },
-    {
-      description: 'ซื้อของใช้ 7-Eleven',
-      amount: 85,
-      paidBy: '1',
-      category: 'other',
-      daysAgo: 7,
-    },
-
-    // Week 2 (8-14 days ago)
-    {
-      description: 'ค่าไฟฟ้าบ้าน',
-      amount: 1450,
-      paidBy: '2',
-      category: 'utilities',
-      daysAgo: 8,
-    },
-    {
-      description: "อาหารเช้า McDonald's",
-      amount: 195,
-      paidBy: '1',
-      category: 'food',
-      daysAgo: 9,
-    },
-    {
-      description: 'Bolt ไปสนามบิน',
-      amount: 320,
-      paidBy: '2',
-      category: 'transport',
-      daysAgo: 10,
-    },
-    {
-      description: 'ซื้อหูฟัง AirPods',
-      amount: 6900,
-      paidBy: '1',
-      category: 'shopping',
-      daysAgo: 11,
-    },
-    {
-      description: 'BBQ พลาซ่า บุฟเฟ่ต์',
-      amount: 799,
-      paidBy: '2',
-      category: 'food',
-      daysAgo: 12,
-    },
-    {
-      description: 'คาราโอเกะ Music Box',
-      amount: 450,
-      paidBy: '1',
-      category: 'entertainment',
-      daysAgo: 13,
-    },
-    {
-      description: 'ซื้อยา Boots Pharmacy',
-      amount: 280,
-      paidBy: '2',
-      category: 'other',
-      daysAgo: 14,
-    },
-
-    // Week 3 (15-21 days ago)
-    {
-      description: 'ข้าวแกงร้านป้าแดง',
-      amount: 160,
-      paidBy: '1',
-      category: 'food',
-      daysAgo: 15,
-    },
-    {
-      description: 'ค่าน้ำประปา',
-      amount: 280,
-      paidBy: '2',
-      category: 'utilities',
-      daysAgo: 16,
-    },
-    {
-      description: 'BTS ราชเทวี-สยาม',
-      amount: 44,
-      paidBy: '1',
-      category: 'transport',
-      daysAgo: 17,
-    },
-    {
-      description: 'ซื้อเครื่องสำอาง Sephora',
-      amount: 2100,
-      paidBy: '2',
-      category: 'shopping',
-      daysAgo: 18,
-    },
-    {
-      description: 'พิซซ่า Pizza Hut',
-      amount: 650,
-      paidBy: '1',
-      category: 'food',
-      daysAgo: 19,
-    },
-    {
-      description: 'โบว์ลิ่ง RCA',
-      amount: 380,
-      paidBy: '2',
-      category: 'entertainment',
-      daysAgo: 20,
-    },
-    {
-      description: 'ซื้อผงซักฟอก Big C',
-      amount: 199,
-      paidBy: '1',
-      category: 'other',
-      daysAgo: 21,
-    },
-
-    // Week 4 (22-30 days ago)
-    {
-      description: 'ค่าอินเทอร์เน็ต TRUE',
-      amount: 990,
-      paidBy: '2',
-      category: 'utilities',
-      daysAgo: 22,
-    },
-    {
-      description: 'ข้าวมันไก่ตอนเที่ยง',
-      amount: 50,
-      paidBy: '1',
-      category: 'food',
-      daysAgo: 23,
-    },
-    {
-      description: 'แท็กซี่ไปงานเลี้ยง',
-      amount: 180,
-      paidBy: '2',
-      category: 'transport',
-      daysAgo: 24,
-    },
-    {
-      description: 'ซื้อรองเท้า Nike',
-      amount: 3200,
-      paidBy: '1',
-      category: 'shopping',
-      daysAgo: 25,
-    },
-    {
-      description: 'ชาบู On The Table',
-      amount: 750,
-      paidBy: '2',
-      category: 'food',
-      daysAgo: 26,
-    },
-    {
-      description: 'คอนเสิร์ต Impact Arena',
-      amount: 1800,
-      paidBy: '1',
-      category: 'entertainment',
-      daysAgo: 27,
-    },
-    {
-      description: 'ซื้อสมุดและปากกา',
-      amount: 350,
-      paidBy: '2',
-      category: 'other',
-      daysAgo: 28,
-    },
-    {
-      description: 'สปาเท้า Traditional Massage',
-      amount: 400,
-      paidBy: '1',
-      category: 'entertainment',
-      daysAgo: 29,
-    },
-    {
-      description: 'ข้าวเย็น KFC',
-      amount: 299,
-      paidBy: '2',
-      category: 'food',
-      daysAgo: 30,
-    },
-  ];
-
-  // Generate expenses with proper IDs and participants
-  sampleData.forEach((data, index) => {
-    expenses.push({
-      id: (1000 + index).toString(),
-      description: data.description,
-      amount: data.amount,
-      paidBy: data.paidBy,
-      participants: ['1', '2'], // Both users participate in all expenses
-      splitType: 'equal',
-      date: getRandomDateInPastMonth(data.daysAgo),
-      category: data.category as ExpenseCategory,
-      status: 'pending' as ExpenseStatus, // All new sample data starts as pending
-    });
-  });
-
-  return expenses;
+// Helper functions for JSON file operations
+const downloadJsonFile = (data: JsonData, filename: string) => {
+  const jsonContent = JSON.stringify(data, null, 2);
+  const blob = new Blob([jsonContent], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 };
 
-const STORAGE_KEY = 'share-expenses-data';
-const USERS_STORAGE_KEY = 'share-expenses-users';
+const loadJsonFile = (): Promise<JsonData> => {
+  return new Promise((resolve, reject) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+
+    input.onchange = event => {
+      const file = (event.target as HTMLInputElement).files?.[0];
+      if (!file) {
+        reject(new Error('No file selected'));
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          const data = JSON.parse(e.target?.result as string);
+          resolve(data);
+        } catch {
+          reject(new Error('Invalid JSON file'));
+        }
+      };
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.readAsText(file);
+    };
+
+    input.oncancel = () => reject(new Error('File selection cancelled'));
+    input.click();
+  });
+};
 
 // Helper functions for localStorage operations
 const loadExpensesFromStorage = (): Expense[] => {
   try {
-    const savedData = localStorage.getItem(STORAGE_KEY);
+    const savedData = localStorage.getItem('share-expenses-data');
     if (savedData) {
       const parsed = JSON.parse(savedData);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        // Migrate old expenses without category or status
+        // Migrate old expenses without status
         return parsed.map(expense => ({
           ...expense,
-          category: expense.category || 'other',
           status: expense.status || 'pending',
         }));
       }
@@ -297,22 +86,20 @@ const loadExpensesFromStorage = (): Expense[] => {
   } catch (error) {
     console.warn('Failed to load expenses from localStorage:', error);
   }
-  // Return sample data if no saved data exists
-  return generateSampleExpenses();
+  return [];
 };
 
 const saveExpensesToStorage = (expenses: Expense[]) => {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(expenses));
+    localStorage.setItem('share-expenses-data', JSON.stringify(expenses));
   } catch (error) {
     console.warn('Failed to save expenses to localStorage:', error);
   }
 };
 
-// Helper functions for users localStorage operations
 const loadUsersFromStorage = (): User[] => {
   try {
-    const savedData = localStorage.getItem(USERS_STORAGE_KEY);
+    const savedData = localStorage.getItem('share-expenses-users');
     if (savedData) {
       const parsed = JSON.parse(savedData);
       return Array.isArray(parsed) && parsed.length >= 2
@@ -327,24 +114,28 @@ const loadUsersFromStorage = (): User[] => {
 
 const saveUsersToStorage = (users: User[]) => {
   try {
-    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
+    localStorage.setItem('share-expenses-users', JSON.stringify(users));
   } catch (error) {
     console.warn('Failed to save users to localStorage:', error);
   }
 };
 
 function App() {
+  const { isDarkMode, toggleDarkMode } = useTheme();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<User[]>(DEFAULT_USERS);
+  const [activeTab, setActiveTab] = useState('list');
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
 
-  // Initialize with last 30 days
+  // Initialize with this week (Monday to Sunday)
   const today = new Date();
-  const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const weekStart = startOfWeek(today, { weekStartsOn: 1 }); // 1 = Monday
+  const weekEnd = endOfWeek(today, { weekStartsOn: 1 }); // Sunday
 
   const [dateRange, setDateRange] = useState<DateRange>({
-    startDate: thirtyDaysAgo.toISOString().split('T')[0],
-    endDate: today.toISOString().split('T')[0],
+    startDate: format(weekStart, 'yyyy-MM-dd'),
+    endDate: format(weekEnd, 'yyyy-MM-dd'),
   });
 
   // Load data from localStorage on component mount
@@ -353,16 +144,21 @@ function App() {
     const savedUsers = loadUsersFromStorage();
     setExpenses(savedExpenses);
     setUsers(savedUsers);
+    setLastSaved(new Date());
   }, []);
 
   // Save expenses to localStorage whenever expenses change
   useEffect(() => {
-    saveExpensesToStorage(expenses);
-  }, [expenses]);
+    if (expenses.length > 0 || users.length !== 2) {
+      saveExpensesToStorage(expenses);
+      setLastSaved(new Date());
+    }
+  }, [expenses, users.length]);
 
   // Save users to localStorage whenever users change
   useEffect(() => {
     saveUsersToStorage(users);
+    setLastSaved(new Date());
   }, [users]);
 
   const addExpense = (expense: Omit<Expense, 'id'>) => {
@@ -371,6 +167,9 @@ function App() {
       id: Date.now().toString(),
     };
     setExpenses(prev => [...prev, newExpense]);
+
+    // Switch back to list tab after adding
+    setActiveTab('list');
   };
 
   const updateExpense = (updatedExpense: Omit<Expense, 'id'>) => {
@@ -384,6 +183,9 @@ function App() {
       )
     );
     setEditingExpense(null);
+
+    // Switch back to list tab after updating
+    setActiveTab('list');
   };
 
   const updateExpenseStatus = (id: string, status: ExpenseStatus) => {
@@ -400,55 +202,180 @@ function App() {
 
   const handleEdit = (expense: Expense) => {
     setEditingExpense(expense);
+    setActiveTab('add'); // Switch to add tab for editing
   };
 
   const handleCancelEdit = () => {
     setEditingExpense(null);
+    setActiveTab('list'); // Go back to list tab
+  };
+
+  // Export data to JSON file
+  const handleExportData = () => {
+    const data: JsonData = {
+      exportDate: new Date().toISOString(),
+      version: '1.0',
+      users: users,
+      expenses: expenses,
+    };
+    const timestamp = new Date().toISOString().slice(0, 10);
+    downloadJsonFile(data, `share-expenses-${timestamp}.json`);
+  };
+
+  // Import data from JSON file
+  const handleImportData = async () => {
+    try {
+      const data = await loadJsonFile();
+
+      // Validate data structure
+      if (
+        !data.users ||
+        !data.expenses ||
+        !Array.isArray(data.users) ||
+        !Array.isArray(data.expenses)
+      ) {
+        alert('ไฟล์ JSON ไม่ถูกต้อง: ขาดข้อมูล users หรือ expenses');
+        return;
+      }
+
+      // Ensure minimum users
+      if (data.users.length < 2) {
+        alert('ต้องมีผู้ใช้อย่างน้อย 2 คน');
+        return;
+      }
+
+      // Confirm before importing
+      const confirmImport = confirm(
+        `นำเข้าข้อมูล ${data.users.length} ผู้ใช้ และ ${data.expenses.length} รายจ่าย?\n\nข้อมูลปัจจุบันจะถูกแทนที่`
+      );
+
+      if (!confirmImport) return;
+
+      // Validate and migrate expenses
+      const validExpenses = data.expenses.map((expense: Expense) => ({
+        ...expense,
+        status: expense.status || 'pending',
+      }));
+
+      setUsers(data.users);
+      setExpenses(validExpenses);
+
+      alert(
+        `นำเข้าข้อมูลสำเร็จ! ${data.users.length} ผู้ใช้, ${validExpenses.length} รายจ่าย`
+      );
+    } catch (error) {
+      alert(
+        `เกิดข้อผิดพลาด: ${error instanceof Error ? error.message : 'ไม่สามารถอ่านไฟล์ได้'}`
+      );
+    }
+  };
+
+  // Clear all data
+  const handleClearData = () => {
+    if (
+      confirm(
+        'คุณต้องการล้างข้อมูลทั้งหมดหรือไม่? การดำเนินการนี้ไม่สามารถย้อนกลับได้'
+      )
+    ) {
+      setExpenses([]);
+      setUsers(DEFAULT_USERS);
+      localStorage.removeItem('share-expenses-data');
+      localStorage.removeItem('share-expenses-users');
+      alert('ล้างข้อมูลทั้งหมดเรียบร้อย');
+    }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      <div className="mx-auto max-w-6xl px-4 py-8">
+    <div className="min-h-screen bg-white dark:bg-gray-900 transition-colors">
+      <div className="mx-auto max-w-5xl px-4 py-6">
         {/* Header */}
-        <div className="mb-10 text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 mb-4 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl shadow-lg">
-            <span className="text-2xl text-white">💰</span>
+        <div className="mb-8">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-emerald-500 rounded-lg flex items-center justify-center">
+                <span className="text-white font-bold">💰</span>
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white thai-text">
+                  Share Expenses
+                </h1>
+                <p className="text-sm text-gray-600 dark:text-gray-400 thai-text">
+                  แบ่งปันค่าใช้จ่าย คำนวณอัตโนมัติ
+                </p>
+              </div>
+            </div>
+
+            {/* Dark Mode Toggle & Actions */}
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={toggleDarkMode}
+                className="p-2 border-gray-300 dark:border-gray-600"
+              >
+                {isDarkMode ? (
+                  <Sun className="h-4 w-4" />
+                ) : (
+                  <Moon className="h-4 w-4" />
+                )}
+              </Button>
+
+              <button
+                onClick={handleExportData}
+                className="px-3 py-1.5 bg-emerald-500 text-white rounded-md hover:bg-emerald-600 transition-colors text-sm thai-text"
+              >
+                ส่งออก
+              </button>
+              <button
+                onClick={handleImportData}
+                className="px-3 py-1.5 bg-emerald-500 text-white rounded-md hover:bg-emerald-600 transition-colors text-sm thai-text"
+              >
+                นำเข้า
+              </button>
+              <button
+                onClick={handleClearData}
+                className="px-3 py-1.5 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors text-sm thai-text"
+              >
+                ล้าง
+              </button>
+            </div>
           </div>
-          <h1 className="text-4xl font-bold text-gray-900 mb-3 thai-text">
-            Share Expenses
-          </h1>
-          <p className="text-lg text-gray-600 thai-text">
-            แบ่งปันค่าใช้จ่าย คำนวณอัตโนมัติ
-          </p>
+
+          {/* Save Status */}
+          {lastSaved && (
+            <div className="mt-3 text-xs text-gray-500 dark:text-gray-400 thai-text">
+              บันทึกล่าสุด: {lastSaved.toLocaleTimeString('th-TH')}
+            </div>
+          )}
         </div>
 
         {/* Main Content */}
-        <Tabs defaultValue="list" className="w-full">
-          <div className="mb-8">
-            <TabsList className="grid w-full grid-cols-4 bg-white border border-gray-200 shadow-lg rounded-xl p-1 h-14">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <div className="mb-6">
+            <TabsList className="grid w-full grid-cols-4 bg-gray-100 dark:bg-gray-800 p-1 h-10 rounded-lg">
               <TabsTrigger
                 value="list"
-                className="text-sm font-medium h-11 rounded-lg data-[state=active]:shadow-md thai-text"
+                className="text-sm h-8 rounded-md data-[state=active]:bg-emerald-500 data-[state=active]:text-white thai-text"
               >
-                📋 รายการ
+                รายการ
               </TabsTrigger>
               <TabsTrigger
                 value="add"
-                className="text-sm font-medium h-11 rounded-lg data-[state=active]:shadow-md thai-text"
+                className="text-sm h-8 rounded-md data-[state=active]:bg-emerald-500 data-[state=active]:text-white thai-text"
               >
-                ⭐ เพิ่มรายจ่าย
+                เพิ่ม
               </TabsTrigger>
               <TabsTrigger
                 value="users"
-                className="text-sm font-medium h-11 rounded-lg data-[state=active]:shadow-md thai-text"
+                className="text-sm h-8 rounded-md data-[state=active]:bg-emerald-500 data-[state=active]:text-white thai-text"
               >
-                👥 ผู้ใช้
+                ผู้ใช้
               </TabsTrigger>
               <TabsTrigger
                 value="export"
-                className="text-sm font-medium h-11 rounded-lg data-[state=active]:shadow-md thai-text"
+                className="text-sm h-8 rounded-md data-[state=active]:bg-emerald-500 data-[state=active]:text-white thai-text"
               >
-                📊 ส่งออก
+                ส่งออก
               </TabsTrigger>
             </TabsList>
           </div>

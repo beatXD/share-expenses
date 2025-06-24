@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { CalendarIcon } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { th } from 'date-fns/locale';
 
 import { cn } from '@/lib/utils';
@@ -23,7 +23,6 @@ export interface DateRange {
 interface DateRangePickerProps {
   dateRange: DateRange;
   onDateRangeChange: (dateRange: DateRange) => void;
-  onQuickSelect?: (days: number) => void;
 }
 
 // Helper function to format date as DD/MM/YYYY
@@ -35,19 +34,22 @@ const formatDateToDDMMYYYY = (date: Date | undefined): string => {
 // Helper function to convert string to Date
 const stringToDate = (dateString: string): Date | undefined => {
   if (!dateString) return undefined;
-  return new Date(dateString);
+  try {
+    return parseISO(dateString);
+  } catch {
+    return undefined;
+  }
 };
 
 // Helper function to convert Date to ISO string
 const dateToString = (date: Date | undefined): string => {
   if (!date) return '';
-  return date.toISOString().split('T')[0];
+  return format(date, 'yyyy-MM-dd');
 };
 
 export function DateRangePicker({
   dateRange,
   onDateRangeChange,
-  onQuickSelect,
 }: DateRangePickerProps) {
   const [startOpen, setStartOpen] = React.useState(false);
   const [endOpen, setEndOpen] = React.useState(false);
@@ -74,14 +76,6 @@ export function DateRangePicker({
       setEndOpen(false);
     }
   };
-
-  const quickSelectOptions = [
-    { label: '3 วันล่าสุด', days: 3 },
-    { label: '5 วันล่าสุด', days: 5 },
-    { label: '7 วันล่าสุด', days: 7 },
-    { label: '15 วันล่าสุด', days: 15 },
-    { label: '30 วันล่าสุด', days: 30 },
-  ];
 
   return (
     <div className="space-y-4">
@@ -150,24 +144,6 @@ export function DateRangePicker({
           </Popover>
         </div>
       </div>
-
-      {/* Quick Date Range Buttons */}
-      {onQuickSelect && (
-        <div className="flex flex-wrap gap-2">
-          {quickSelectOptions.map(option => (
-            <Button
-              key={option.days}
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => onQuickSelect(option.days)}
-              className="text-xs thai-text"
-            >
-              {option.label}
-            </Button>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

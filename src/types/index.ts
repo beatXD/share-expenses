@@ -4,14 +4,6 @@ export interface User {
   color: string;
 }
 
-export type ExpenseCategory =
-  | 'food'
-  | 'transport'
-  | 'shopping'
-  | 'entertainment'
-  | 'utilities'
-  | 'other';
-
 export type ExpenseStatus = 'pending' | 'settled';
 
 export interface Expense {
@@ -23,7 +15,6 @@ export interface Expense {
   splitType: 'equal' | 'custom';
   customSplits?: Record<string, number>; // user id -> amount
   date: string;
-  category: ExpenseCategory;
   status: ExpenseStatus;
 }
 
