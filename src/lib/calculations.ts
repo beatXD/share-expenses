@@ -26,7 +26,12 @@ export function calculateUserBalances(
     balances[user.id] = 0;
   });
 
-  expenses.forEach(expense => {
+  // Only include pending expenses in balance calculations
+  const pendingExpenses = expenses.filter(
+    expense => expense.status === 'pending'
+  );
+
+  pendingExpenses.forEach(expense => {
     const splits = calculateSplits(expense);
 
     // Person who paid gets credited
@@ -103,16 +108,21 @@ export function generateSummary(
     );
   });
 
-  const totalExpenses = filteredExpenses.reduce(
+  // Only include pending expenses in summary calculations
+  const pendingExpenses = filteredExpenses.filter(
+    expense => expense.status === 'pending'
+  );
+
+  const totalExpenses = pendingExpenses.reduce(
     (sum, expense) => sum + expense.amount,
     0
   );
-  const balances = calculateUserBalances(filteredExpenses, users);
+  const balances = calculateUserBalances(pendingExpenses, users);
   const settlements = calculateSettlements(balances);
 
   const userTotals: Record<string, number> = {};
   users.forEach(user => {
-    userTotals[user.id] = filteredExpenses
+    userTotals[user.id] = pendingExpenses
       .filter(expense => expense.paidBy === user.id)
       .reduce((sum, expense) => sum + expense.amount, 0);
   });

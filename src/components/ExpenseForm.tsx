@@ -17,9 +17,9 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+
 import { formatCurrency } from '@/lib/calculations';
-import type { User, Expense, ExpenseCategory } from '@/types';
+import type { User, Expense, ExpenseCategory, ExpenseStatus } from '@/types';
 
 interface ExpenseFormProps {
   users: User[];
@@ -50,14 +50,6 @@ export function ExpenseForm({
   const [category, setCategory] = useState<ExpenseCategory>(
     editingExpense?.category || 'other'
   );
-
-  // Quick amount buttons organized by categories
-  const quickAmountCategories = {
-    popular: [20, 50, 100, 200, 500], // ยอดนิยม
-    small: [5, 10, 15, 25, 30, 40], // ของเล็ก
-    food: [60, 80, 120, 150, 250, 300], // อาหาร
-    large: [400, 600, 800, 1000, 1500, 2000], // ของใหญ่
-  };
 
   // Utility functions for amount manipulation
   const handleQuickAmount = (quickAmount: number, action: 'set' | 'add') => {
@@ -186,8 +178,9 @@ export function ExpenseForm({
       participants,
       splitType,
       customSplits: splitType === 'custom' ? customSplits : undefined,
-      date: editingExpense?.date || new Date().toISOString(),
+      date: editingExpense?.date || new Date().toISOString().split('T')[0],
       category,
+      status: editingExpense?.status || 'pending',
     };
 
     onSubmit(expenseData);
@@ -216,7 +209,7 @@ export function ExpenseForm({
   ] as const;
 
   return (
-    <div className="w-full max-w-xl mx-auto">
+    <div className="w-full">
       <Card className="shadow-xl border border-gray-200 bg-white rounded-2xl overflow-hidden">
         <CardHeader className="py-6  bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-100">
           <CardTitle className="text-2xl font-semibold text-gray-900 thai-text">
@@ -228,24 +221,59 @@ export function ExpenseForm({
         </CardHeader>
         <CardContent className="space-y-6 p-6">
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Description Input */}
-            <div className="space-y-2">
-              <Label
-                htmlFor="description"
-                className="text-sm font-medium text-gray-900 thai-text"
-              >
-                📝 รายการ
-              </Label>
-              <Input
-                id="description"
-                placeholder="อาหารเที่ยง, ค่าน้ำมัน, ของใช้..."
-                value={description}
-                onChange={e => setDescription(e.target.value)}
-                className="h-11 border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 shadow-sm thai-text"
-              />
+            {/* Description and Category in same row */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Description Input */}
+              <div className="md:col-span-2 space-y-2">
+                <Label
+                  htmlFor="description"
+                  className="text-sm font-medium text-gray-900 thai-text"
+                >
+                  📝 รายการ
+                </Label>
+                <Input
+                  id="description"
+                  placeholder="อาหารเที่ยง, ค่าน้ำมัน, ของใช้..."
+                  value={description}
+                  onChange={e => setDescription(e.target.value)}
+                  className="h-11 border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 shadow-sm thai-text"
+                />
+              </div>
+
+              {/* Category Selection */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-gray-900 thai-text">
+                  📂 หมวดหมู่
+                </Label>
+                <Select
+                  value={category}
+                  onValueChange={value => setCategory(value as ExpenseCategory)}
+                >
+                  <SelectTrigger className="h-11 border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 shadow-sm">
+                    <SelectValue
+                      placeholder="เลือกหมวดหมู่"
+                      className="thai-text"
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categoryOptions.map(cat => (
+                      <SelectItem
+                        key={cat.value}
+                        value={cat.value}
+                        className="thai-text"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span>{cat.emoji}</span>
+                          <span>{cat.label.replace(/^.+\s/, '')}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
-            {/* Amount Input */}
+            {/* Amount Input - Simplified */}
             <div className="space-y-4">
               <Label
                 htmlFor="amount"
@@ -268,8 +296,8 @@ export function ExpenseForm({
                 </span>
               </div>
 
-              {/* Quick Amount Buttons */}
-              <div className="space-y-4 p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl border border-gray-200 shadow-sm">
+              {/* Simplified Quick Amount Buttons */}
+              <div className="space-y-3 p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl border border-gray-200 shadow-sm">
                 <div className="text-sm font-medium text-gray-700 thai-text flex items-center gap-2">
                   ⚡ เลือกจำนวนเงิน
                   {totalAmount > 0 && (
@@ -279,168 +307,62 @@ export function ExpenseForm({
                   )}
                 </div>
 
-                <Tabs defaultValue="popular" className="w-full">
-                  <TabsList className="grid w-full grid-cols-4 bg-white shadow-sm rounded-lg h-10">
-                    <TabsTrigger value="popular" className="text-xs thai-text">
-                      🔥 นิยม
-                    </TabsTrigger>
-                    <TabsTrigger value="small" className="text-xs thai-text">
-                      🛒 เล็ก
-                    </TabsTrigger>
-                    <TabsTrigger value="food" className="text-xs thai-text">
-                      🍽️ อาหาร
-                    </TabsTrigger>
-                    <TabsTrigger value="large" className="text-xs thai-text">
-                      💎 ใหญ่
-                    </TabsTrigger>
-                  </TabsList>
+                {/* Popular amounts only */}
+                <div className="grid grid-cols-4 gap-2">
+                  {[20, 50, 100, 150, 200, 300, 500, 1000].map(quickAmount => (
+                    <Button
+                      key={quickAmount}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleQuickAmount(quickAmount, 'set')}
+                      className="h-9 text-sm font-medium border-gray-300 hover:border-blue-500 hover:text-blue-600 hover:shadow-sm transition-all duration-200 thai-text bg-white"
+                    >
+                      ฿{quickAmount}
+                    </Button>
+                  ))}
+                </div>
 
-                  {Object.entries(quickAmountCategories).map(
-                    ([category, amounts]) => (
-                      <TabsContent
-                        key={category}
-                        value={category}
-                        className="mt-3"
-                      >
-                        <div className="grid grid-cols-3 gap-2">
-                          {amounts.map(quickAmount => (
-                            <Button
-                              key={quickAmount}
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() =>
-                                handleQuickAmount(quickAmount, 'set')
-                              }
-                              className="h-9 text-sm font-medium border-gray-300 hover:border-blue-500 hover:text-blue-600 hover:shadow-sm transition-all duration-200 thai-text bg-white"
-                            >
-                              ฿{quickAmount}
-                            </Button>
-                          ))}
-                        </div>
-                      </TabsContent>
-                    )
-                  )}
-                </Tabs>
-
-                {/* Utility Buttons */}
-                <div className="space-y-3 border-t pt-3">
-                  <div className="text-xs text-gray-600 thai-text">
-                    🛠️ เครื่องมือ:
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleUtilityAction('sub5')}
-                        className="h-8 text-xs w-full border-red-300 hover:border-red-500 hover:text-red-600 thai-text"
-                      >
-                        -5
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleUtilityAction('sub10')}
-                        className="h-8 text-xs w-full border-red-300 hover:border-red-500 hover:text-red-600 thai-text"
-                      >
-                        -10
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleUtilityAction('sub50')}
-                        className="h-8 text-xs w-full border-red-300 hover:border-red-500 hover:text-red-600 thai-text"
-                      >
-                        -50
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleUtilityAction('sub100')}
-                        className="h-8 text-xs w-full border-red-300 hover:border-red-500 hover:text-red-600 thai-text"
-                      >
-                        -100
-                      </Button>
-                    </div>
-
-                    <div className="space-y-1">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleUtilityAction('add5')}
-                        className="h-8 text-xs w-full border-green-300 hover:border-green-500 hover:text-green-600 thai-text"
-                      >
-                        +5
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleUtilityAction('add10')}
-                        className="h-8 text-xs w-full border-green-300 hover:border-green-500 hover:text-green-600 thai-text"
-                      >
-                        +10
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleUtilityAction('add50')}
-                        className="h-8 text-xs w-full border-green-300 hover:border-green-500 hover:text-green-600 thai-text"
-                      >
-                        +50
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleUtilityAction('add100')}
-                        className="h-8 text-xs w-full border-green-300 hover:border-green-500 hover:text-green-600 thai-text"
-                      >
-                        +100
-                      </Button>
-                    </div>
-                  </div>
+                {/* Simple utility buttons */}
+                <div className="grid grid-cols-4 gap-2 pt-2 border-t border-gray-300">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleUtilityAction('sub10')}
+                    className="h-8 text-xs border-red-300 hover:border-red-500 hover:text-red-600 thai-text"
+                  >
+                    -10
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleUtilityAction('add10')}
+                    className="h-8 text-xs border-green-300 hover:border-green-500 hover:text-green-600 thai-text"
+                  >
+                    +10
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleUtilityAction('sub50')}
+                    className="h-8 text-xs border-red-300 hover:border-red-500 hover:text-red-600 thai-text"
+                  >
+                    -50
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleUtilityAction('add50')}
+                    className="h-8 text-xs border-green-300 hover:border-green-500 hover:text-green-600 thai-text"
+                  >
+                    +50
+                  </Button>
                 </div>
               </div>
-            </div>
-
-            {/* Category Selection */}
-            <div className="space-y-2">
-              <Label className="text-sm font-medium text-gray-900 thai-text">
-                📂 หมวดหมู่
-              </Label>
-              <Select
-                value={category}
-                onValueChange={value => setCategory(value as ExpenseCategory)}
-              >
-                <SelectTrigger className="h-11 border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 shadow-sm">
-                  <SelectValue
-                    placeholder="เลือกหมวดหมู่"
-                    className="thai-text"
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {categoryOptions.map(cat => (
-                    <SelectItem
-                      key={cat.value}
-                      value={cat.value}
-                      className="thai-text"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span>{cat.emoji}</span>
-                        <span>{cat.label.replace(/^.+\s/, '')}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </div>
 
             {/* Paid By Selection */}

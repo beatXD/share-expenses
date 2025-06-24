@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -6,15 +7,32 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { formatCurrency } from '@/lib/calculations';
 import type { User, Expense } from '@/types';
+import type { DateRange } from '@/components/ui/date-range-picker';
 
 interface ExportDataProps {
   expenses: Expense[];
   users: User[];
+  dateRange: DateRange;
 }
 
-export function ExportData({ expenses, users }: ExportDataProps) {
+export function ExportData({ expenses, users, dateRange }: ExportDataProps) {
+  const [exportDateFilter, setExportDateFilter] = useState<number>(30); // Default to 30 days
+
+  // Filter expenses by the main date range
+  const mainFilteredExpenses = (() => {
+    const startDate = new Date(dateRange.startDate);
+    const endDate = new Date(dateRange.endDate);
+    endDate.setHours(23, 59, 59, 999); // Include the entire end date
+
+    return expenses.filter(expense => {
+      const expenseDate = new Date(expense.date);
+      return expenseDate >= startDate && expenseDate <= endDate;
+    });
+  })();
+
   const getUserName = (userId: string) => {
     const user = users.find(u => u.id === userId);
     return user?.name || 'Unknown';
@@ -30,6 +48,13 @@ export function ExportData({ expenses, users }: ExportDataProps) {
       other: 'อื่นๆ',
     };
     return categoryMap[category] || 'อื่นๆ';
+  };
+
+  // Filter expenses by date
+  const getFilteredExpenses = (days: number) => {
+    const now = new Date();
+    const startDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+    return expenses.filter(expense => new Date(expense.date) >= startDate);
   };
 
   const downloadFile = (content: string, filename: string, type: string) => {
@@ -51,14 +76,16 @@ export function ExportData({ expenses, users }: ExportDataProps) {
       'จำนวนเงิน',
       'ผู้จ่าย',
       'หมวดหมู่',
+      'สถานะ',
       'การแบ่ง',
       'รายละเอียดการแบ่ง',
     ];
 
-    const rows = expenses.map(expense => {
+    const rows = mainFilteredExpenses.map(expense => {
       const date = new Date(expense.date).toLocaleDateString('th-TH');
       const paidBy = getUserName(expense.paidBy);
       const category = getCategoryLabel(expense.category);
+      const status = expense.status === 'settled' ? 'เคลียแล้ว' : 'รอเคลีย';
       const splitType =
         expense.splitType === 'equal' ? 'แบ่งเท่าๆ กัน' : 'กำหนดเอง';
 
@@ -83,6 +110,7 @@ export function ExportData({ expenses, users }: ExportDataProps) {
         formatCurrency(expense.amount),
         paidBy,
         category,
+        status,
         splitType,
         splitDetails,
       ];
@@ -101,11 +129,22 @@ export function ExportData({ expenses, users }: ExportDataProps) {
   };
 
   const exportToJSON = () => {
+    const jsonFilteredExpenses = getFilteredExpenses(exportDateFilter).filter(
+      expense => {
+        const startDate = new Date(dateRange.startDate);
+        const endDate = new Date(dateRange.endDate);
+        endDate.setHours(23, 59, 59, 999);
+        const expenseDate = new Date(expense.date);
+        return expenseDate >= startDate && expenseDate <= endDate;
+      }
+    );
+
     const exportData = {
       exportDate: new Date().toISOString(),
+      dateRange: `${exportDateFilter} วันล่าสุด`,
       summary: {
-        totalExpenses: expenses.length,
-        totalAmount: expenses.reduce((sum, e) => sum + e.amount, 0),
+        totalExpenses: jsonFilteredExpenses.length,
+        totalAmount: jsonFilteredExpenses.reduce((sum, e) => sum + e.amount, 0),
         users: users.length,
       },
       users: users.map(user => ({
@@ -113,7 +152,7 @@ export function ExportData({ expenses, users }: ExportDataProps) {
         name: user.name,
         color: user.color,
       })),
-      expenses: expenses.map(expense => ({
+      expenses: jsonFilteredExpenses.map(expense => ({
         id: expense.id,
         date: expense.date,
         description: expense.description,
@@ -122,6 +161,8 @@ export function ExportData({ expenses, users }: ExportDataProps) {
         paidByName: getUserName(expense.paidBy),
         category: expense.category,
         categoryLabel: getCategoryLabel(expense.category),
+        status: expense.status,
+        statusLabel: expense.status === 'settled' ? 'เคลียแล้ว' : 'รอเคลีย',
         splitType: expense.splitType,
         participants: expense.participants,
         participantNames: expense.participants.map(id => getUserName(id)),
@@ -140,56 +181,25 @@ export function ExportData({ expenses, users }: ExportDataProps) {
     };
 
     const jsonContent = JSON.stringify(exportData, null, 2);
-    downloadFile(jsonContent, 'share-expenses.json', 'application/json');
+    const filename = `share-expenses-${exportDateFilter}days.json`;
+    downloadFile(jsonContent, filename, 'application/json');
   };
 
-  const importFromJSON = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = e => {
-      try {
-        const content = e.target?.result as string;
-        const data = JSON.parse(content);
-
-        // Basic validation
-        if (!data.expenses || !Array.isArray(data.expenses)) {
-          alert('ไฟล์ไม่ถูกต้อง: ไม่พบข้อมูลรายจ่าย');
-          return;
-        }
-
-        const confirmed = confirm(
-          `พบข้อมูล ${data.expenses.length} รายการ\n` +
-            `ต้องการนำเข้าข้อมูลหรือไม่?\n\n` +
-            `⚠️ ข้อมูลปัจจุบันจะถูกแทนที่`
-        );
-
-        if (confirmed) {
-          // Import logic would go here
-          alert('ฟีเจอร์นำเข้าข้อมูลจะมาในเวอร์ชันถัดไป');
-        }
-      } catch (error) {
-        alert('เกิดข้อผิดพลาดในการอ่านไฟล์: ' + (error as Error).message);
-      }
-    };
-    reader.readAsText(file);
-
-    // Reset input
-    event.target.value = '';
-  };
-
-  const totalAmount = expenses.reduce(
+  const totalAmount = mainFilteredExpenses.reduce(
     (sum, expense) => sum + expense.amount,
     0
   );
   const oldestExpense =
-    expenses.length > 0
-      ? new Date(Math.min(...expenses.map(e => new Date(e.date).getTime())))
+    mainFilteredExpenses.length > 0
+      ? new Date(
+          Math.min(...mainFilteredExpenses.map(e => new Date(e.date).getTime()))
+        )
       : null;
   const newestExpense =
-    expenses.length > 0
-      ? new Date(Math.max(...expenses.map(e => new Date(e.date).getTime())))
+    mainFilteredExpenses.length > 0
+      ? new Date(
+          Math.max(...mainFilteredExpenses.map(e => new Date(e.date).getTime()))
+        )
       : null;
 
   return (
@@ -212,7 +222,7 @@ export function ExportData({ expenses, users }: ExportDataProps) {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
               <div className="text-center">
                 <div className="text-2xl font-bold text-blue-600">
-                  {expenses.length}
+                  {mainFilteredExpenses.length}
                 </div>
                 <div className="text-gray-600 thai-text">รายจ่าย</div>
               </div>
@@ -234,7 +244,7 @@ export function ExportData({ expenses, users }: ExportDataProps) {
                   newestExpense &&
                   oldestExpense.getTime() !== newestExpense.getTime()
                     ? `${Math.ceil((newestExpense.getTime() - oldestExpense.getTime()) / (1000 * 60 * 60 * 24))} วัน`
-                    : expenses.length > 0
+                    : mainFilteredExpenses.length > 0
                       ? '1 วัน'
                       : '0 วัน'}
                 </div>
@@ -266,9 +276,9 @@ export function ExportData({ expenses, users }: ExportDataProps) {
                 <Button
                   onClick={exportToCSV}
                   className="w-full shadow-sm hover:shadow-md transition-all duration-200 thai-text"
-                  disabled={expenses.length === 0}
+                  disabled={mainFilteredExpenses.length === 0}
                 >
-                  💾 ดาวน์โหลด CSV
+                  💾 ดาวน์โหลด CSV ({mainFilteredExpenses.length} รายการ)
                 </Button>
               </div>
 
@@ -281,71 +291,84 @@ export function ExportData({ expenses, users }: ExportDataProps) {
                       JSON (ข้อมูลดิบ)
                     </h4>
                     <p className="text-sm text-gray-600 thai-text">
-                      สำหรับสำรองข้อมูลหรือพัฒนา
+                      ช่วง {exportDateFilter} วันล่าสุด
                     </p>
                   </div>
                 </div>
+
+                {/* Date Filter for JSON Export */}
+                <div className="mb-3">
+                  <div className="text-xs text-gray-600 mb-2 thai-text">
+                    📅 ช่วงเวลา
+                  </div>
+                  <Tabs
+                    value={exportDateFilter.toString()}
+                    onValueChange={value =>
+                      setExportDateFilter(parseInt(value))
+                    }
+                  >
+                    <TabsList className="grid w-full grid-cols-5 bg-gray-100 shadow-inner rounded-lg p-1 h-8">
+                      <TabsTrigger
+                        value="3"
+                        className="text-xs thai-text rounded data-[state=active]:shadow-sm"
+                      >
+                        3 วัน
+                      </TabsTrigger>
+                      <TabsTrigger
+                        value="7"
+                        className="text-xs thai-text rounded data-[state=active]:shadow-sm"
+                      >
+                        7 วัน
+                      </TabsTrigger>
+                      <TabsTrigger
+                        value="15"
+                        className="text-xs thai-text rounded data-[state=active]:shadow-sm"
+                      >
+                        15 วัน
+                      </TabsTrigger>
+                      <TabsTrigger
+                        value="30"
+                        className="text-xs thai-text rounded data-[state=active]:shadow-sm"
+                      >
+                        30 วัน
+                      </TabsTrigger>
+                      <TabsTrigger
+                        value="365"
+                        className="text-xs thai-text rounded data-[state=active]:shadow-sm"
+                      >
+                        ทั้งหมด
+                      </TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                </div>
+
                 <Button
                   onClick={exportToJSON}
                   variant="outline"
                   className="w-full shadow-sm hover:shadow-md transition-all duration-200 thai-text"
-                  disabled={expenses.length === 0}
+                  disabled={mainFilteredExpenses.length === 0}
                 >
-                  💾 ดาวน์โหลด JSON
+                  💾 ดาวน์โหลด JSON (
+                  {
+                    getFilteredExpenses(exportDateFilter).filter(expense => {
+                      const startDate = new Date(dateRange.startDate);
+                      const endDate = new Date(dateRange.endDate);
+                      endDate.setHours(23, 59, 59, 999);
+                      const expenseDate = new Date(expense.date);
+                      return expenseDate >= startDate && expenseDate <= endDate;
+                    }).length
+                  }{' '}
+                  รายการ)
                 </Button>
               </div>
             </div>
           </div>
 
-          {/* Import Options */}
-          <div className="mt-8 pt-6 border-t border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4 thai-text">
-              📥 นำเข้าข้อมูล
-            </h3>
-
-            <div className="p-4 border border-gray-200 rounded-xl">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="text-2xl">📁</div>
-                <div>
-                  <h4 className="font-semibold text-gray-900 thai-text">
-                    JSON File
-                  </h4>
-                  <p className="text-sm text-gray-600 thai-text">
-                    นำเข้าข้อมูลจากไฟล์ JSON ที่ส่งออกไว้
-                  </p>
-                </div>
-              </div>
-
-              <input
-                type="file"
-                accept=".json"
-                onChange={importFromJSON}
-                className="hidden"
-                id="json-import"
-              />
-              <label htmlFor="json-import">
-                <Button
-                  variant="outline"
-                  className="w-full shadow-sm hover:shadow-md transition-all duration-200 thai-text cursor-pointer"
-                  asChild
-                >
-                  <span>📁 เลือกไฟล์ JSON</span>
-                </Button>
-              </label>
-            </div>
-
-            <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-              <p className="text-sm text-amber-700 thai-text">
-                ⚠️ หมายเหตุ: การนำเข้าข้อมูลจะแทนที่ข้อมูลปัจจุบันทั้งหมด
-                กรุณาสำรองข้อมูลก่อนใช้งาน
-              </p>
-            </div>
-          </div>
-
-          {expenses.length === 0 && (
+          {mainFilteredExpenses.length === 0 && (
             <div className="mt-6 p-4 bg-gray-50 border border-gray-200 rounded-lg text-center">
               <p className="text-gray-600 thai-text">
-                📝 ยังไม่มีข้อมูลรายจ่าย เพิ่มรายจ่ายก่อนเพื่อส่งออกข้อมูล
+                📝 ไม่มีข้อมูลรายจ่ายในช่วงวันที่ที่เลือก
+                ลองเปลี่ยนช่วงวันที่หรือเพิ่มรายจ่าย
               </p>
             </div>
           )}

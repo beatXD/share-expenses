@@ -12,6 +12,8 @@ export type ExpenseCategory =
   | 'utilities'
   | 'other';
 
+export type ExpenseStatus = 'pending' | 'settled';
+
 export interface Expense {
   id: string;
   description: string;
@@ -22,6 +24,7 @@ export interface Expense {
   customSplits?: Record<string, number>; // user id -> amount
   date: string;
   category: ExpenseCategory;
+  status: ExpenseStatus;
 }
 
 export interface Settlement {

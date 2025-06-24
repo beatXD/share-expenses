@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Card,
   CardContent,
@@ -6,17 +6,41 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 import { formatCurrency, calculateUserBalances } from '@/lib/calculations';
 import type { User, Expense } from '@/types';
+import type { DateRange } from '@/components/ui/date-range-picker';
 
 interface SummaryDashboardProps {
   expenses: Expense[];
   users: User[];
+  dateRange: DateRange;
 }
 
-export function SummaryDashboard({ expenses, users }: SummaryDashboardProps) {
+export function SummaryDashboard({
+  expenses,
+  users,
+  dateRange,
+}: SummaryDashboardProps) {
+  const [settlementDateFilter, setSettlementDateFilter] = useState<number>(7); // Default to 7 days
+
+  // Filter expenses by the main date range and only include pending expenses
+  const filteredExpenses = useMemo(() => {
+    const startDate = new Date(dateRange.startDate);
+    const endDate = new Date(dateRange.endDate);
+    endDate.setHours(23, 59, 59, 999); // Include the entire end date
+
+    return expenses.filter(expense => {
+      const expenseDate = new Date(expense.date);
+      return (
+        expenseDate >= startDate &&
+        expenseDate <= endDate &&
+        expense.status === 'pending'
+      );
+    });
+  }, [expenses, dateRange]);
+
   const getUserName = (userId: string) => {
     const user = users.find(u => u.id === userId);
     return user?.name || 'Unknown';
@@ -44,14 +68,26 @@ export function SummaryDashboard({ expenses, users }: SummaryDashboardProps) {
         break;
     }
 
-    return expenses.filter(expense => new Date(expense.date) >= startDate);
+    return expenses.filter(
+      expense =>
+        new Date(expense.date) >= startDate && expense.status === 'pending'
+    );
   };
 
-  const totalExpenses = expenses.reduce(
+  // Filter expenses by settlement date filter and only include pending expenses
+  const getFilteredExpenses = (days: number) => {
+    const now = new Date();
+    const startDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+    return expenses.filter(
+      expense =>
+        new Date(expense.date) >= startDate && expense.status === 'pending'
+    );
+  };
+
+  const totalExpenses = filteredExpenses.reduce(
     (sum, expense) => sum + expense.amount,
     0
   );
-  const todayExpenses = getExpensesByPeriod('today');
   const weekExpenses = getExpensesByPeriod('week');
   const monthExpenses = getExpensesByPeriod('month');
 
@@ -63,7 +99,7 @@ export function SummaryDashboard({ expenses, users }: SummaryDashboardProps) {
       summary[user.id] = { spent: 0, paidOut: 0 };
     });
 
-    expenses.forEach(expense => {
+    filteredExpenses.forEach(expense => {
       const splits =
         expense.splitType === 'equal'
           ? expense.participants.reduce(
@@ -89,12 +125,14 @@ export function SummaryDashboard({ expenses, users }: SummaryDashboardProps) {
     });
 
     return summary;
-  }, [expenses, users]);
+  }, [filteredExpenses, users]);
 
-  // Calculate settlement suggestions
+  // Calculate settlement suggestions based on filtered date
   const settlementSuggestions = useMemo(() => {
+    const settlementFilteredExpenses =
+      getFilteredExpenses(settlementDateFilter);
     const settlements: Array<{ from: string; to: string; amount: number }> = [];
-    const balances = calculateUserBalances(expenses, users);
+    const balances = calculateUserBalances(settlementFilteredExpenses, users);
     const balancesCopy = { ...balances };
 
     // Create sorted lists of creditors and debtors
@@ -134,9 +172,9 @@ export function SummaryDashboard({ expenses, users }: SummaryDashboardProps) {
     }
 
     return settlements;
-  }, [expenses, users]);
+  }, [filteredExpenses, users, settlementDateFilter]);
 
-  if (expenses.length === 0) {
+  if (filteredExpenses.length === 0) {
     return (
       <Card className="shadow-xl border border-gray-200 bg-white rounded-2xl">
         <CardContent className="p-12 text-center">
@@ -168,7 +206,7 @@ export function SummaryDashboard({ expenses, users }: SummaryDashboardProps) {
               {formatCurrency(totalExpenses)}
             </div>
             <div className="text-xs text-blue-600 thai-text">
-              📊 {expenses.length} รายการ
+              📊 {filteredExpenses.length} รายการ
             </div>
           </CardContent>
         </Card>
@@ -212,59 +250,41 @@ export function SummaryDashboard({ expenses, users }: SummaryDashboardProps) {
         </Card>
       </div>
 
-      {/* User Spending Summary */}
-      <Card className="shadow-xl border border-gray-200 bg-white rounded-2xl overflow-hidden">
-        <CardHeader className="py-4 bg-gradient-to-r from-teal-50 to-cyan-50 border-b border-gray-100">
-          <CardTitle className="text-lg font-semibold text-gray-900 thai-text">
+      {/* User Spending Summary - Simplified */}
+      <Card className="shadow-lg border border-gray-200 bg-white rounded-xl overflow-hidden">
+        <CardHeader className="py-3 bg-gradient-to-r from-teal-50 to-cyan-50 border-b border-gray-100">
+          <CardTitle className="text-base font-semibold text-gray-900 thai-text">
             💳 สรุปรายได้-รายจ่าย
           </CardTitle>
-          <CardDescription className="text-gray-600 thai-text">
-            แต่ละคนใช้เท่าไหร่ และออกเงินเท่าไร่
+          <CardDescription className="text-xs text-gray-500 thai-text">
+            เฉพาะรายการที่ยังไม่เคลีย
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4 p-6">
-          {Object.entries(userSpendingSummary).map(([userId, summary]) => (
-            <div
-              key={userId}
-              className="p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl shadow-sm border border-gray-200"
-            >
-              <div className="flex items-center gap-3 mb-3">
-                <div
-                  className="w-5 h-5 rounded-full shadow-md border-2 border-white"
-                  style={{ backgroundColor: getUserColor(userId) }}
-                />
-                <span className="font-bold text-lg text-gray-900 thai-text">
-                  {getUserName(userId)}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
-                  <div className="text-xs text-blue-600 mb-1 thai-text">
-                    💰 ใช้ไป (ส่วนแบ่ง)
-                  </div>
-                  <div className="text-lg font-bold text-blue-800">
-                    {formatCurrency(summary.spent)}
-                  </div>
+        <CardContent className="p-4">
+          <div className="space-y-2">
+            {Object.entries(userSpendingSummary).map(([userId, summary]) => (
+              <div
+                key={userId}
+                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+              >
+                <div className="flex items-center gap-2">
+                  <div
+                    className="w-3 h-3 rounded-full"
+                    style={{ backgroundColor: getUserColor(userId) }}
+                  />
+                  <span className="font-medium text-sm text-gray-900 thai-text">
+                    {getUserName(userId)}
+                  </span>
                 </div>
-
-                <div className="bg-green-50 p-3 rounded-lg border border-green-200">
-                  <div className="text-xs text-green-600 mb-1 thai-text">
-                    💸 ออกเงิน (จ่ายจริง)
-                  </div>
-                  <div className="text-lg font-bold text-green-800">
-                    {formatCurrency(summary.paidOut)}
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-3 pt-3 border-t border-gray-300">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600 thai-text">
-                    ผลต่าง:
+                <div className="flex items-center gap-4 text-xs">
+                  <span className="text-blue-600">
+                    ใช้: {formatCurrency(summary.spent)}
+                  </span>
+                  <span className="text-green-600">
+                    จ่าย: {formatCurrency(summary.paidOut)}
                   </span>
                   <span
-                    className={`text-sm font-bold ${
+                    className={`font-bold ${
                       summary.paidOut - summary.spent > 0
                         ? 'text-green-600'
                         : summary.paidOut - summary.spent < 0
@@ -277,8 +297,8 @@ export function SummaryDashboard({ expenses, users }: SummaryDashboardProps) {
                   </span>
                 </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </CardContent>
       </Card>
 
@@ -289,10 +309,55 @@ export function SummaryDashboard({ expenses, users }: SummaryDashboardProps) {
             💡 คำแนะนำการชำระ
           </CardTitle>
           <CardDescription className="text-gray-600 thai-text">
-            วิธีจ่ายเงินให้เสร็จสิ้น
+            วิธีจ่ายเงินให้เสร็จสิ้น (เฉพาะรายการที่ยังไม่เคลีย ช่วง{' '}
+            {settlementDateFilter} วันล่าสุด)
           </CardDescription>
         </CardHeader>
         <CardContent className="p-6">
+          {/* Date Filter */}
+          <div className="mb-4">
+            <div className="text-sm font-medium text-gray-700 mb-2 thai-text">
+              📅 ช่วงเวลาการคำนวณ
+            </div>
+            <Tabs
+              value={settlementDateFilter.toString()}
+              onValueChange={value => setSettlementDateFilter(parseInt(value))}
+            >
+              <TabsList className="grid w-full grid-cols-5 bg-gray-100 shadow-inner rounded-xl p-1 h-10">
+                <TabsTrigger
+                  value="3"
+                  className="text-xs thai-text rounded-lg data-[state=active]:shadow-md"
+                >
+                  3 วัน
+                </TabsTrigger>
+                <TabsTrigger
+                  value="5"
+                  className="text-xs thai-text rounded-lg data-[state=active]:shadow-md"
+                >
+                  5 วัน
+                </TabsTrigger>
+                <TabsTrigger
+                  value="7"
+                  className="text-xs thai-text rounded-lg data-[state=active]:shadow-md"
+                >
+                  7 วัน
+                </TabsTrigger>
+                <TabsTrigger
+                  value="15"
+                  className="text-xs thai-text rounded-lg data-[state=active]:shadow-md"
+                >
+                  15 วัน
+                </TabsTrigger>
+                <TabsTrigger
+                  value="30"
+                  className="text-xs thai-text rounded-lg data-[state=active]:shadow-md"
+                >
+                  30 วัน
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
+
           {settlementSuggestions.length === 0 ? (
             <div className="text-center py-8">
               <div className="text-green-400 text-6xl mb-4">🎉</div>
@@ -300,7 +365,7 @@ export function SummaryDashboard({ expenses, users }: SummaryDashboardProps) {
                 ทุกคนชำระเงินเรียบร้อย
               </div>
               <div className="text-sm text-gray-500 mt-2 thai-text">
-                ไม่มีหนี้สินค้างจ่าย
+                ไม่มีหนี้สินค้างจ่ายในช่วง {settlementDateFilter} วันที่ผ่านมา
               </div>
             </div>
           ) : (
@@ -342,190 +407,6 @@ export function SummaryDashboard({ expenses, users }: SummaryDashboardProps) {
               ))}
             </div>
           )}
-        </CardContent>
-      </Card>
-
-      {/* Time Period Summary */}
-      <Card className="shadow-xl border border-gray-200 bg-white rounded-2xl overflow-hidden">
-        <CardHeader className="py-4 bg-gradient-to-r from-purple-50 to-pink-50 border-b border-gray-100">
-          <CardTitle className="text-lg font-semibold text-gray-900 thai-text">
-            📈 สรุปตามช่วงเวลา
-          </CardTitle>
-          <CardDescription className="text-gray-600 thai-text">
-            รายจ่ายในแต่ละช่วงเวลา
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="p-6">
-          <Tabs defaultValue="week" className="w-full">
-            <TabsList className="grid w-full grid-cols-3 bg-gray-100 shadow-inner rounded-xl p-1 h-12">
-              <TabsTrigger
-                value="today"
-                className="text-sm thai-text rounded-lg data-[state=active]:shadow-md"
-              >
-                🌟 วันนี้
-              </TabsTrigger>
-              <TabsTrigger
-                value="week"
-                className="text-sm thai-text rounded-lg data-[state=active]:shadow-md"
-              >
-                📅 7 วัน
-              </TabsTrigger>
-              <TabsTrigger
-                value="month"
-                className="text-sm thai-text rounded-lg data-[state=active]:shadow-md"
-              >
-                🗓️ 30 วัน
-              </TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="today" className="mt-6">
-              <div className="space-y-4">
-                <div className="flex justify-between items-center p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl shadow-inner border border-gray-200">
-                  <span className="text-sm text-gray-600 thai-text">
-                    🌟 รวมวันนี้
-                  </span>
-                  <span className="font-bold text-xl text-gray-900">
-                    {formatCurrency(
-                      todayExpenses.reduce((sum, e) => sum + e.amount, 0)
-                    )}
-                  </span>
-                </div>
-                {todayExpenses.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500 thai-text">
-                    <div className="text-4xl mb-2">😴</div>
-                    ไม่มีรายจ่ายวันนี้
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {users.map(user => {
-                      const userExpenses = todayExpenses.filter(
-                        e => e.paidBy === user.id
-                      );
-                      const userTotal = userExpenses.reduce(
-                        (sum, e) => sum + e.amount,
-                        0
-                      );
-                      if (userTotal === 0) return null;
-
-                      return (
-                        <div
-                          key={user.id}
-                          className="flex items-center justify-between p-3 bg-white rounded-lg shadow-sm border border-gray-100"
-                        >
-                          <div className="flex items-center gap-3">
-                            <div
-                              className="w-4 h-4 rounded-full shadow-sm"
-                              style={{ backgroundColor: user.color }}
-                            />
-                            <span className="text-sm text-gray-700 thai-text">
-                              {user.name}
-                            </span>
-                          </div>
-                          <span className="text-sm font-bold text-gray-900">
-                            {formatCurrency(userTotal)}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </TabsContent>
-
-            <TabsContent value="week" className="mt-6">
-              <div className="space-y-4">
-                <div className="flex justify-between items-center p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl shadow-inner border border-gray-200">
-                  <span className="text-sm text-gray-600 thai-text">
-                    📅 รวม 7 วัน
-                  </span>
-                  <span className="font-bold text-xl text-gray-900">
-                    {formatCurrency(
-                      weekExpenses.reduce((sum, e) => sum + e.amount, 0)
-                    )}
-                  </span>
-                </div>
-                <div className="space-y-3">
-                  {users.map(user => {
-                    const userExpenses = weekExpenses.filter(
-                      e => e.paidBy === user.id
-                    );
-                    const userTotal = userExpenses.reduce(
-                      (sum, e) => sum + e.amount,
-                      0
-                    );
-                    if (userTotal === 0) return null;
-
-                    return (
-                      <div
-                        key={user.id}
-                        className="flex items-center justify-between p-3 bg-white rounded-lg shadow-sm border border-gray-100"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div
-                            className="w-4 h-4 rounded-full shadow-sm"
-                            style={{ backgroundColor: user.color }}
-                          />
-                          <span className="text-sm text-gray-700 thai-text">
-                            {user.name}
-                          </span>
-                        </div>
-                        <span className="text-sm font-bold text-gray-900">
-                          {formatCurrency(userTotal)}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="month" className="mt-6">
-              <div className="space-y-4">
-                <div className="flex justify-between items-center p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl shadow-inner border border-gray-200">
-                  <span className="text-sm text-gray-600 thai-text">
-                    🗓️ รวม 30 วัน
-                  </span>
-                  <span className="font-bold text-xl text-gray-900">
-                    {formatCurrency(
-                      monthExpenses.reduce((sum, e) => sum + e.amount, 0)
-                    )}
-                  </span>
-                </div>
-                <div className="space-y-3">
-                  {users.map(user => {
-                    const userExpenses = monthExpenses.filter(
-                      e => e.paidBy === user.id
-                    );
-                    const userTotal = userExpenses.reduce(
-                      (sum, e) => sum + e.amount,
-                      0
-                    );
-                    if (userTotal === 0) return null;
-
-                    return (
-                      <div
-                        key={user.id}
-                        className="flex items-center justify-between p-3 bg-white rounded-lg shadow-sm border border-gray-100"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div
-                            className="w-4 h-4 rounded-full shadow-sm"
-                            style={{ backgroundColor: user.color }}
-                          />
-                          <span className="text-sm text-gray-700 thai-text">
-                            {user.name}
-                          </span>
-                        </div>
-                        <span className="text-sm font-bold text-gray-900">
-                          {formatCurrency(userTotal)}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </TabsContent>
-          </Tabs>
         </CardContent>
       </Card>
     </div>
